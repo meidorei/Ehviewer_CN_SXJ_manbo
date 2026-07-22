@@ -985,4 +985,5 @@
     <string name="imported_archive_info_message">这是从本地存储中导入的项目</string>
     <string name="imported_archive_category">本地导入</string>
 
+    <string name="auto_append_chinese">自动拼接中文</string>
 </resources>

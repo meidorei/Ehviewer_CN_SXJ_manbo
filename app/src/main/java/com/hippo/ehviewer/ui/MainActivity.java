@@ -58,6 +58,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.appcompat.app.AlertDialog;
+import androidx.fragment.app.Fragment;
 
 import com.google.android.material.navigation.NavigationView;
 import com.google.android.material.snackbar.Snackbar;
@@ -415,6 +416,7 @@ public final class MainActivity extends StageActivity
 //                newsItem.setVisible(true);
 //            }
             mNavView.setNavigationItemSelectedListener(this);
+            syncAutoAppendChineseMenuItem();
         }
         if (Settings.getTheme() == 0) {
             mChangeTheme.setTextColor(getColor(R.color.theme_change_light));
@@ -845,6 +847,18 @@ public final class MainActivity extends StageActivity
             } else {
                 mNavView.setCheckedItem(resId);
             }
+            // NavigationView#setCheckedItem may clear other checked menu items.
+            syncAutoAppendChineseMenuItem();
+        }
+    }
+
+    private void syncAutoAppendChineseMenuItem() {
+        if (mNavView == null) {
+            return;
+        }
+        MenuItem item = mNavView.getMenu().findItem(R.id.nav_auto_append_chinese);
+        if (item != null) {
+            item.setChecked(Settings.getAutoAppendChinese());
         }
     }
 
@@ -879,6 +893,17 @@ public final class MainActivity extends StageActivity
     @SuppressLint({"NonConstantResourceId", "RtlHardcoded"})
     @Override
     public boolean onNavigationItemSelected(MenuItem item) {
+        if (item.getItemId() == R.id.nav_auto_append_chinese) {
+            boolean enabled = !Settings.getAutoAppendChinese();
+            Settings.putAutoAppendChinese(enabled);
+            item.setChecked(enabled);
+            refreshVisibleGalleryListForChineseFilter();
+            if (mDrawerLayout != null) {
+                mDrawerLayout.closeDrawers();
+            }
+            return false;
+        }
+
         // Don't select twice
         if (item.isChecked()) {
             return false;
@@ -938,6 +963,17 @@ public final class MainActivity extends StageActivity
         return true;
     }
 
+    private void refreshVisibleGalleryListForChineseFilter() {
+        List<Fragment> fragments = getSupportFragmentManager().getFragments();
+        for (int i = fragments.size() - 1; i >= 0; i--) {
+            Fragment fragment = fragments.get(i);
+            if (fragment instanceof GalleryListScene && fragment.isVisible()) {
+                ((GalleryListScene) fragment).onAutoAppendChineseChanged();
+                return;
+            }
+        }
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == REQUEST_CODE_SETTINGS) {
@@ -961,6 +997,7 @@ public final class MainActivity extends StageActivity
 
     @Override
     public void onDrawerOpened(View drawerView) {
+        syncAutoAppendChineseMenuItem();
         if (limitsCountView != null) {
             limitsCountView.onLoadData(drawerView, true);
         }

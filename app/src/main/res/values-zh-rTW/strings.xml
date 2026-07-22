@@ -990,4 +990,5 @@
     <string name="dummy_button">虛擬按鈕</string>
     <string name="dummy_content">虛擬\n內容</string>
 
+    <string name="auto_append_chinese">自動拼接中文</string>
 </resources>
