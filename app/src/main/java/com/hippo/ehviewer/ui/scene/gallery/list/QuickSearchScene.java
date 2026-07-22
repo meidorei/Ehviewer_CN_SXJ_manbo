@@ -42,6 +42,7 @@ import com.hippo.ehviewer.EhDB;
 import com.hippo.ehviewer.R;
 import com.hippo.ehviewer.dao.QuickSearch;
 import com.hippo.ehviewer.ui.scene.ToolbarScene;
+import com.hippo.ehviewer.subscription.SubscriptionRepository;
 import com.hippo.util.DrawableManager;
 import com.hippo.view.ViewTransition;
 import com.hippo.lib.yorozuya.AssertUtils;
@@ -190,6 +191,9 @@ public final class QuickSearchScene extends ToolbarScene {
                         @Override
                         public void onClick(DialogInterface dialog, int which) {
                             EhDB.deleteQuickSearch(quickSearch);
+                            SubscriptionRepository repository = SubscriptionRepository.getInstance();
+                            repository.execute(() -> repository.deleteQuickSearchCheckpoints(
+                                    repository.getAccountKey(), quickSearch.getId()));
                             mQuickSearchList.remove(position);
                         }
                     })

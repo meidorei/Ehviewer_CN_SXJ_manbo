@@ -29,6 +29,11 @@ import com.hippo.ehviewer.client.data.userTag.UserTagList;
 import com.hippo.ehviewer.client.exception.EhException;
 import com.hippo.ehviewer.ui.MainActivity;
 import com.hippo.ehviewer.ui.scene.EhCallback;
+import com.hippo.ehviewer.subscription.QuerySignatureFactory;
+import com.hippo.ehviewer.subscription.SearchQueryPolicy;
+import com.hippo.ehviewer.subscription.SubscriptionRepository;
+import com.hippo.ehviewer.subscription.SubscriptionSnapshot;
+import com.hippo.ehviewer.subscription.TagUpdateState;
 import com.hippo.scene.Announcer;
 import com.hippo.scene.SceneFragment;
 import com.hippo.widget.ProgressView;
@@ -36,6 +41,7 @@ import com.hippo.lib.yorozuya.AssertUtils;
 import com.hippo.lib.yorozuya.ViewUtils;
 
 import java.util.ArrayList;
+import java.util.Map;
 
 import static com.hippo.ehviewer.Settings.*;
 
@@ -66,6 +72,7 @@ public class SubscriptionDraw {
     private final EhTagDatabase ehTags;
 
     private String tagName;
+    private SubscriptionItemAdapter adapter;
 
 
 
@@ -106,6 +113,9 @@ public class SubscriptionDraw {
         toolbar.setOnMenuItemClickListener(item -> {  //点击增加快速搜索按钮触发
             int id = item.getItemId();
             switch (id) {
+                case R.id.action_refresh:
+                    callback.onSubscriptionRefresh();
+                    break;
                 case R.id.action_add:
                     addNewTag();
                     break;
@@ -130,10 +140,17 @@ public class SubscriptionDraw {
     }
 
     public void setUserTagList(UserTagList tagList){
+        if (tagList == null) return;
         if (this.userTagList == null){
             this.userTagList = tagList;
         }else {
             this.userTagList.userTags = tagList.userTags;
+        }
+        EhApplication.saveUserTagList(context, this.userTagList);
+        SubscriptionSnapshot.replace(this.userTagList);
+        if (adapter != null) {
+            adapter.notifyDataSetChanged();
+            loadFollowCounts();
         }
 
     }
@@ -167,7 +184,7 @@ public class SubscriptionDraw {
 //            name.add(userTag.getName(ehTags));
 //        }
 
-        SubscriptionItemAdapter adapter = new SubscriptionItemAdapter(context, userTagList, ehTags);
+        adapter = new SubscriptionItemAdapter(context, userTagList, ehTags);
 
         listView.setAdapter(adapter);
         listView.setOnItemClickListener((parent, view1, position, id) -> {
@@ -178,6 +195,29 @@ public class SubscriptionDraw {
         if (userTagList.size()>0){
             resume();
         }
+        loadFollowCounts();
+    }
+
+    private void loadFollowCounts() {
+        UserTagList snapshot = userTagList;
+        SubscriptionSnapshot.replace(snapshot);
+        SubscriptionRepository repository = SubscriptionRepository.getInstance();
+        repository.execute(() -> {
+            String account = repository.getAccountKey();
+            repository.replaceTagSnapshot(account, snapshot.userTags);
+            SearchQueryPolicy.Result query = SearchQueryPolicy.resolve("",
+                    com.hippo.ehviewer.client.data.ListUrlBuilder.MODE_SUBSCRIPTION,
+                    getAutoAppendChinese());
+            Map<String, TagUpdateState> counts = repository.readTagCounts(account,
+                    QuerySignatureFactory.create(query.effectiveQuery, query.chineseActuallyApplied));
+            for (UserTag tag : snapshot.userTags) {
+                TagUpdateState state = counts.get(SubscriptionRepository.normalizeTagName(tag.tagName));
+                tag.followCount = state == null ? null : state.displayCount();
+            }
+            if (activity != null) activity.runOnUiThread(() -> {
+                if (adapter != null) adapter.notifyDataSetChanged();
+            });
+        });
     }
 
     private void addNewTag() {
@@ -299,6 +339,7 @@ public class SubscriptionDraw {
                 userTagList = result;
             }
             EhApplication.saveUserTagList(context, userTagList);
+            SubscriptionSnapshot.replace(userTagList);
             bindViewSecond();
             needLoad = false;
         }

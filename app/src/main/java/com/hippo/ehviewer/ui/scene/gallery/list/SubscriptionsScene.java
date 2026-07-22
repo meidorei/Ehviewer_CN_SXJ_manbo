@@ -48,6 +48,8 @@ import com.hippo.ehviewer.client.data.userTag.UserTag;
 import com.hippo.ehviewer.client.data.userTag.UserTagList;
 import com.hippo.ehviewer.ui.scene.EhCallback;
 import com.hippo.ehviewer.ui.scene.ToolbarScene;
+import com.hippo.ehviewer.subscription.SubscriptionRepository;
+import com.hippo.ehviewer.subscription.SubscriptionSnapshot;
 import com.hippo.scene.SceneFragment;
 import com.hippo.util.DrawableManager;
 import com.hippo.view.ViewTransition;
@@ -324,7 +326,11 @@ public final class SubscriptionsScene extends ToolbarScene {
             }else {
                 userTagList.userTags = result.userTags;
             }
-            EhApplication.saveUserTagList(context,result);
+            EhApplication.saveUserTagList(context,userTagList);
+            SubscriptionSnapshot.replace(userTagList);
+            SubscriptionRepository repository = SubscriptionRepository.getInstance();
+            repository.execute(() -> repository.replaceTagSnapshot(
+                    repository.getAccountKey(), userTagList.userTags));
             bindSecond();
         }
 

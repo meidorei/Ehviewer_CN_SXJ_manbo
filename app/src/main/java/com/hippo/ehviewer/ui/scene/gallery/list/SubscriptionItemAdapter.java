@@ -65,7 +65,9 @@ public class SubscriptionItemAdapter extends BaseAdapter {
 
         TextView textView = view.findViewById(R.id.label);
 
-        textView.setText(userTag.getName(ehTags));
+        String name = userTag.getName(ehTags);
+        textView.setText(userTag.hidden || userTag.followCount == null
+                ? name : name + "  ·  " + userTag.followCount);
 
 
         return view;

@@ -5,6 +5,7 @@ import android.content.Context;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.AbsListView;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
@@ -20,11 +21,18 @@ import com.hippo.ehviewer.Settings;
 import com.hippo.ehviewer.client.EhTagDatabase;
 import com.hippo.ehviewer.dao.QuickSearch;
 import com.hippo.ehviewer.util.TagTranslationUtil;
+import com.hippo.ehviewer.subscription.CheckpointKey;
+import com.hippo.ehviewer.subscription.FeedCheckpoint;
+import com.hippo.ehviewer.subscription.QuerySignatureFactory;
+import com.hippo.ehviewer.subscription.SearchQueryPolicy;
+import com.hippo.ehviewer.subscription.SubscriptionRepository;
 import com.hippo.scene.Announcer;
 import com.hippo.lib.yorozuya.AssertUtils;
 import com.hippo.lib.yorozuya.ViewUtils;
 
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 
 public class BookmarksDraw {
 
@@ -87,14 +95,25 @@ public class BookmarksDraw {
 
         final List<QuickSearch> list = quickSearchList;
 
-        final ArrayAdapter<QuickSearch> adapter = new ArrayAdapter<>(context, R.layout.item_simple_list, list);
+        final Map<Long, Boolean> updates = new HashMap<>();
+        final ArrayAdapter<QuickSearch> adapter = new ArrayAdapter<QuickSearch>(context, R.layout.item_simple_list, list) {
+            @Override public View getView(int position, View convertView, ViewGroup parent) {
+                TextView view = (TextView) super.getView(position, convertView, parent);
+                QuickSearch item = getItem(position);
+                boolean hasUpdate = item != null && Boolean.TRUE.equals(updates.get(item.getId()));
+                view.setText(item == null ? "" : item.name + (hasUpdate ? "  ·  NEW" : ""));
+                return view;
+            }
+        };
         listView.setAdapter(adapter);
+        loadUpdateBadges(list, updates, adapter);
         //快速搜索点击tag事件监听
         listView.setOnItemClickListener((parent, view1, position, id) -> {
             if (null == scene.mHelper || null == scene.mUrlBuilder) {
                 return;
             }
 
+            scene.setQuickSearchFeedSource(list.get(position));
             scene.mUrlBuilder.set(list.get(position));
             scene.mUrlBuilder.setPageIndex(0);
             scene.onUpdateUrlBuilder();
@@ -111,6 +130,10 @@ public class BookmarksDraw {
         toolbar.setOnMenuItemClickListener(item -> {  //点击增加快速搜索按钮触发
             int id = item.getItemId();
             switch (id) {
+                case R.id.action_refresh:
+                    if (scene.mHelper != null) scene.mHelper.refresh();
+                    scene.closeDrawer(Gravity.RIGHT);
+                    break;
                 case R.id.action_add:
                     if (Settings.getQuickSearchTip()) {
                         scene.showQuickSearchTipDialog(list, adapter, listView, tip);
@@ -140,6 +163,28 @@ public class BookmarksDraw {
 
 
         return bookmarksView;
+    }
+
+    private void loadUpdateBadges(List<QuickSearch> list, Map<Long, Boolean> updates,
+                                  ArrayAdapter<QuickSearch> adapter) {
+        SubscriptionRepository repository = SubscriptionRepository.getInstance();
+        repository.execute(() -> {
+            String account = repository.getAccountKey();
+            for (QuickSearch item : list) {
+                if (item.getId() == null) continue;
+                SearchQueryPolicy.Result query = SearchQueryPolicy.resolve(item.keyword, item.mode,
+                        Settings.getAutoAppendChinese());
+                String signature = QuerySignatureFactory.create(query.effectiveQuery,
+                        query.chineseActuallyApplied);
+                FeedCheckpoint checkpoint = repository.readCheckpoint(new CheckpointKey(account,
+                        "QUICK_SEARCH", Long.toString(item.getId()), signature));
+                boolean changed = !checkpoint.previous.isEmpty()
+                        && (checkpoint.previous.time != checkpoint.current.time
+                        || !checkpoint.previous.gids.equals(checkpoint.current.gids));
+                updates.put(item.getId(), changed);
+            }
+            if (listView != null) listView.post(adapter::notifyDataSetChanged);
+        });
     }
 
     public void resume() {

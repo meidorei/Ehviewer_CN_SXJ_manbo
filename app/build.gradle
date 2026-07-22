@@ -13,7 +13,7 @@ android {
     testNamespace 'com.hippo.ehviewer.debug'
     compileSdk 35
 //    buildToolsVersion "30.0.3"
-//    ndkVersion '26.1.10909125'
+    ndkVersion '30.0.15729638'
 
     flavorDimensions "distribute"
     productFlavors {

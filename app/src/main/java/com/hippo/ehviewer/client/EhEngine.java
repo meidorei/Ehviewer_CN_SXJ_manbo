@@ -57,6 +57,8 @@ import com.hippo.ehviewer.client.parser.GalleryPageApiParser;
 import com.hippo.ehviewer.client.parser.GalleryPageParser;
 import com.hippo.ehviewer.client.parser.GalleryTokenApiParser;
 import com.hippo.ehviewer.client.parser.MyTagLitParser;
+import com.hippo.ehviewer.subscription.FeedBoundary;
+import com.hippo.ehviewer.subscription.SubscriptionScanResult;
 import com.hippo.ehviewer.client.parser.ProfileParser;
 import com.hippo.ehviewer.client.parser.RateGalleryParser;
 import com.hippo.ehviewer.client.parser.SignInParser;
@@ -71,6 +73,9 @@ import com.hippo.lib.yorozuya.AssertUtils;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Set;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -288,7 +293,6 @@ public class EhEngine {
         }
 
         fillGalleryList(task, okHttpClient, result.galleryInfoList, url, true);
-
         if (code == 200 && url.equals("https://exhentai.org/") && body.isEmpty()) {
             result.customErrorString = GetText.getString(R.string.error_igneous_wrong);
         }
@@ -310,6 +314,44 @@ public class EhEngine {
             }
         }
         return galleryInfoList;
+    }
+
+    /** Serial /watched scanner used only by an explicit manual follow-update. */
+    public static SubscriptionScanResult scanSubscriptions(@Nullable EhClient.Task task,
+                                                            OkHttpClient client,
+                                                            String watchedUrl, String tagUrl,
+                                                            long boundaryTime,
+                                                            Set<Long> boundaryGids) throws Throwable {
+        SubscriptionScanResult scan = new SubscriptionScanResult();
+        scan.tags = getWatchedList(task, client, tagUrl);
+        if (scan.tags == null) throw new ParseException("Unable to load subscription tags", "");
+        FeedBoundary boundary = new FeedBoundary(boundaryTime, boundaryGids);
+        Map<Long, GalleryInfo> unique = new LinkedHashMap<>();
+        String url = watchedUrl;
+        for (int page = 0; page < 4 && url != null && !url.isEmpty(); page++) {
+            GalleryListParser.Result result = getGalleryList(task, client, url,
+                    com.hippo.ehviewer.client.data.ListUrlBuilder.MODE_SUBSCRIPTION);
+            if (!result.galleryInfoList.isEmpty()
+                    && (result.galleryInfoList.get(0).simpleTags == null
+                    || result.galleryInfoList.get(0).postedTimestamp == 0)) {
+                fillGalleryListByApi(task, client, result.galleryInfoList, url);
+            }
+            scan.pagesScanned++;
+            for (GalleryInfo gallery : result.galleryInfoList) {
+                unique.put(gallery.gid, gallery);
+                if (!boundary.isEmpty() && boundary.isFirstOld(gallery.postedTimestamp, gallery.gid)) {
+                    scan.reachedBoundary = true;
+                }
+            }
+            if (boundary.isEmpty() || scan.reachedBoundary
+                    || result.nextHref == null || result.nextHref.isEmpty()) break;
+            okhttp3.HttpUrl base = okhttp3.HttpUrl.parse(url);
+            okhttp3.HttpUrl next = base == null ? null : base.resolve(result.nextHref);
+            url = next == null ? null : next.toString();
+        }
+        scan.galleries.addAll(unique.values());
+        scan.reachedPageLimit = scan.pagesScanned == 4 && !scan.reachedBoundary;
+        return scan;
     }
 
     private static void doFillGalleryListByApi(@Nullable EhClient.Task task, OkHttpClient okHttpClient,

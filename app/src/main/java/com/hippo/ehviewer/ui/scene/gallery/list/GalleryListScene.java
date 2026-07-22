@@ -104,6 +104,17 @@ import com.hippo.ehviewer.ui.scene.BaseScene;
 import com.hippo.ehviewer.ui.scene.EhCallback;
 import com.hippo.ehviewer.ui.scene.ProgressScene;
 import com.hippo.ehviewer.ui.scene.gallery.detail.GalleryDetailScene;
+import com.hippo.ehviewer.subscription.CheckpointKey;
+import com.hippo.ehviewer.subscription.FeedCheckpoint;
+import com.hippo.ehviewer.subscription.FeedBoundary;
+import com.hippo.ehviewer.subscription.FeedBoundaryDecoration;
+import com.hippo.ehviewer.subscription.FeedSourceContext;
+import com.hippo.ehviewer.subscription.QuerySignatureFactory;
+import com.hippo.ehviewer.subscription.SearchQueryPolicy;
+import com.hippo.ehviewer.subscription.SubscriptionRepository;
+import com.hippo.ehviewer.subscription.SubscriptionScanResult;
+import com.hippo.ehviewer.subscription.SubscriptionSnapshot;
+import com.hippo.ehviewer.subscription.SubscriptionUpdateCalculator;
 import com.hippo.ehviewer.util.TagTranslationUtil;
 import com.hippo.ehviewer.widget.GalleryInfoContentHelper;
 import com.hippo.ehviewer.widget.JumpDateSelector;
@@ -138,6 +149,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
+import java.util.LinkedHashSet;
 import java.util.concurrent.ExecutorService;
 
 public final class GalleryListScene extends BaseScene
@@ -155,6 +168,10 @@ public final class GalleryListScene extends BaseScene
 
     private static final int BACK_PRESSED_INTERVAL = 2000;
 
+    private FeedSourceContext mFeedSourceContext;
+    private FeedBoundary mVisibleFeedBoundary = FeedBoundary.EMPTY;
+    private FeedBoundaryDecoration mFeedBoundaryDecoration;
+
     public final static int REQUEST_CODE_SELECT_IMAGE = 0;
 
     public final static String KEY_ACTION = "action";
@@ -167,6 +184,11 @@ public final class GalleryListScene extends BaseScene
     public final static String KEY_LIST_URL_BUILDER = "list_url_builder";
     public final static String KEY_HAS_FIRST_REFRESH = "has_first_refresh";
     public final static String KEY_STATE = "state";
+    private static final String KEY_FEED_TYPE = "feed_type";
+    private static final String KEY_FEED_SOURCE = "feed_source";
+    private static final String KEY_FEED_SIGNATURE = "feed_signature";
+    private static final String KEY_FEED_TIME = "feed_time";
+    private static final String KEY_FEED_GIDS = "feed_gids";
 
     final static int STATE_NORMAL = 0;
     final static int STATE_SIMPLE_SEARCH = 1;
@@ -325,6 +347,68 @@ public final class GalleryListScene extends BaseScene
             mUrlBuilder.reset();
             mUrlBuilder.setMode(ListUrlBuilder.MODE_NORMAL);
         }
+        if (ACTION_HOMEPAGE.equals(action)) {
+            setFeedSource(FeedSourceContext.Type.HOME, "home", mUrlBuilder.getKeyword());
+        } else if (ACTION_SUBSCRIPTION.equals(action)) {
+            setFeedSource(FeedSourceContext.Type.SUBSCRIPTION_AGGREGATE, "watched", mUrlBuilder.getKeyword());
+        } else if (!ACTION_LIST_URL_BUILDER.equals(action)) {
+            setFeedSource(FeedSourceContext.Type.TEMP_SEARCH, "", mUrlBuilder.getKeyword());
+        }
+    }
+
+    private void setFeedSource(FeedSourceContext.Type type, String sourceKey, String originalQuery) {
+        int mode = type == FeedSourceContext.Type.SUBSCRIPTION_AGGREGATE
+                || type == FeedSourceContext.Type.SUBSCRIPTION_TAG
+                ? ListUrlBuilder.MODE_SUBSCRIPTION : ListUrlBuilder.MODE_NORMAL;
+        SearchQueryPolicy.Result query = SearchQueryPolicy.resolve(originalQuery, mode,
+                Settings.getAutoAppendChinese());
+        mFeedSourceContext = new FeedSourceContext(type, sourceKey,
+                QuerySignatureFactory.create(query.effectiveQuery, query.chineseActuallyApplied));
+        mVisibleFeedBoundary = FeedBoundary.EMPTY;
+        clearVisibleFeedMarker();
+        loadFeedBoundary();
+    }
+
+    void setQuickSearchFeedSource(QuickSearch search) {
+        if (search == null || search.getId() == null) return;
+        SearchQueryPolicy.Result query = SearchQueryPolicy.resolve(search.keyword, search.mode,
+                Settings.getAutoAppendChinese());
+        mFeedSourceContext = new FeedSourceContext(FeedSourceContext.Type.QUICK_SEARCH,
+                Long.toString(search.getId()), QuerySignatureFactory.create(
+                query.effectiveQuery, query.chineseActuallyApplied));
+        mVisibleFeedBoundary = FeedBoundary.EMPTY;
+        clearVisibleFeedMarker();
+        loadFeedBoundary();
+    }
+
+    private void clearVisibleFeedMarker() {
+        if (mFeedBoundaryDecoration != null) mFeedBoundaryDecoration.setBoundary(FeedBoundary.EMPTY);
+        if (mRecyclerView != null) mRecyclerView.invalidateItemDecorations();
+    }
+
+    private CheckpointKey checkpointKey(FeedSourceContext context) {
+        SubscriptionRepository repository = SubscriptionRepository.getInstance();
+        String type = context.type == FeedSourceContext.Type.SUBSCRIPTION_TAG
+                ? FeedSourceContext.Type.SUBSCRIPTION_AGGREGATE.name() : context.type.name();
+        String source = context.type == FeedSourceContext.Type.SUBSCRIPTION_TAG ? "watched" : context.sourceKey;
+        return new CheckpointKey(repository.getAccountKey(), type, source, context.querySignature);
+    }
+
+    private void loadFeedBoundary() {
+        FeedSourceContext context = mFeedSourceContext;
+        if (context == null || !context.showsMarker()) return;
+        SubscriptionRepository repository = SubscriptionRepository.getInstance();
+        repository.execute(() -> {
+            FeedCheckpoint checkpoint = repository.readCheckpoint(checkpointKey(context));
+            FeedBoundary boundary = context.type == FeedSourceContext.Type.SUBSCRIPTION_TAG
+                    ? checkpoint.previous : checkpoint.current;
+            if (mFeedSourceContext != context) return;
+            mVisibleFeedBoundary = boundary;
+            if (mRecyclerView != null) mRecyclerView.post(() -> {
+                if (mFeedBoundaryDecoration != null) mFeedBoundaryDecoration.setBoundary(boundary);
+                if (mRecyclerView != null) mRecyclerView.invalidateItemDecorations();
+            });
+        });
     }
 
     @Override
@@ -435,6 +519,14 @@ public final class GalleryListScene extends BaseScene
         mHasFirstRefresh = savedInstanceState.getBoolean(KEY_HAS_FIRST_REFRESH);
         mUrlBuilder = savedInstanceState.getParcelable(KEY_LIST_URL_BUILDER);
         mState = savedInstanceState.getInt(KEY_STATE);
+        int type = savedInstanceState.getInt(KEY_FEED_TYPE, -1);
+        if (type >= 0 && type < FeedSourceContext.Type.values().length) {
+            mFeedSourceContext = new FeedSourceContext(FeedSourceContext.Type.values()[type],
+                    savedInstanceState.getString(KEY_FEED_SOURCE, ""),
+                    savedInstanceState.getString(KEY_FEED_SIGNATURE, ""));
+            mVisibleFeedBoundary = new FeedBoundary(savedInstanceState.getLong(KEY_FEED_TIME),
+                    SubscriptionRepository.parseGids(savedInstanceState.getString(KEY_FEED_GIDS, "")));
+        }
     }
 
     @Override
@@ -450,6 +542,14 @@ public final class GalleryListScene extends BaseScene
         outState.putBoolean(KEY_HAS_FIRST_REFRESH, hasFirstRefresh);
         outState.putParcelable(KEY_LIST_URL_BUILDER, mUrlBuilder);
         outState.putInt(KEY_STATE, mState);
+        if (mFeedSourceContext != null) {
+            outState.putInt(KEY_FEED_TYPE, mFeedSourceContext.type.ordinal());
+            outState.putString(KEY_FEED_SOURCE, mFeedSourceContext.sourceKey);
+            outState.putString(KEY_FEED_SIGNATURE, mFeedSourceContext.querySignature);
+            outState.putLong(KEY_FEED_TIME, mVisibleFeedBoundary.time);
+            outState.putString(KEY_FEED_GIDS,
+                    SubscriptionRepository.serializeGids(mVisibleFeedBoundary.gids));
+        }
     }
 
     @Override
@@ -666,6 +766,15 @@ public final class GalleryListScene extends BaseScene
 
         mAdapter = new GalleryListAdapter(inflater, resources,
                 mRecyclerView, Settings.getListMode());
+        mFeedBoundaryDecoration = new FeedBoundaryDecoration(
+                resources.getDisplayMetrics().density, resources.getDisplayMetrics().scaledDensity,
+                AttrResources.getAttrColor(context, android.R.attr.textColorSecondary),
+                getString(R.string.last_update_marker), position -> {
+                    if (mHelper == null || position < 0 || position >= mHelper.getData().size()) return null;
+                    return mHelper.getDataAtEx(position);
+                });
+        mFeedBoundaryDecoration.setBoundary(mVisibleFeedBoundary);
+        mRecyclerView.addItemDecoration(mFeedBoundaryDecoration);
 
         mAdapter.setThumbItemClickListener(this::onThumbItemClick);
         mRecyclerView.setSelector(Ripple.generateRippleDrawable(context, !AttrResources.getAttrBoolean(context, androidx.appcompat.R.attr.isLightTheme), new ColorDrawable(Color.TRANSPARENT)));
@@ -933,8 +1042,12 @@ public final class GalleryListScene extends BaseScene
         }
         if (null != mRecyclerView) {
             mRecyclerView.stopScroll();
+            if (mFeedBoundaryDecoration != null) {
+                mRecyclerView.removeItemDecoration(mFeedBoundaryDecoration);
+            }
             mRecyclerView = null;
         }
+        mFeedBoundaryDecoration = null;
         if (null != mFabLayout) {
             removeAboveSnackView(mFabLayout);
             mFabLayout = null;
@@ -1113,7 +1226,84 @@ public final class GalleryListScene extends BaseScene
 
     @Override
     public void onSubscriptionItemClick(String name) {
+        setFeedSource(FeedSourceContext.Type.SUBSCRIPTION_TAG, name, "");
         onTagClick(name);
+    }
+
+    @Override
+    public void onSubscriptionRefresh() {
+        if (mUrlBuilder == null || mHelper == null) return;
+        setFeedSource(FeedSourceContext.Type.SUBSCRIPTION_AGGREGATE, "watched", "");
+        closeDrawer(Gravity.RIGHT);
+        SubscriptionRepository repository = SubscriptionRepository.getInstance();
+        FeedSourceContext context = mFeedSourceContext;
+        repository.execute(() -> {
+            CheckpointKey key = checkpointKey(context);
+            FeedCheckpoint checkpoint = repository.readCheckpoint(key);
+            if (checkpoint.updatedAt > 0
+                    && System.currentTimeMillis() - checkpoint.updatedAt < 60_000L) {
+                MainActivity cooldownActivity = getActivity2();
+                if (cooldownActivity != null) cooldownActivity.runOnUiThread(() ->
+                        showTip(R.string.subscription_refresh_cooldown, LENGTH_SHORT));
+                return;
+            }
+            ListUrlBuilder requestBuilder = new ListUrlBuilder();
+            requestBuilder.setMode(ListUrlBuilder.MODE_SUBSCRIPTION);
+            String watchedUrl = requestBuilder.build(Settings.getAutoAppendChinese());
+            MainActivity activity = getActivity2();
+            Context callbackContext = getEHContext();
+            if (activity == null || callbackContext == null || mFeedSourceContext != context) return;
+            activity.runOnUiThread(() -> {
+                EhRequest request = new EhRequest().setMethod(EhClient.METHOD_SCAN_SUBSCRIPTIONS)
+                        .setArgs(watchedUrl, EhUrl.getMyTag(), checkpoint.current.time,
+                                SubscriptionRepository.serializeGids(checkpoint.current.gids))
+                        .setCallback(new EhClient.Callback<SubscriptionScanResult>() {
+                            @Override public void onSuccess(SubscriptionScanResult result) {
+                                finishSubscriptionScan(context, key, checkpoint, result);
+                            }
+
+                            @Override public void onFailure(Exception e) {
+                                showTip(e.getMessage(), LENGTH_LONG);
+                            }
+
+                            @Override public void onCancel() {}
+                        });
+                mClient.execute(request);
+            });
+        });
+    }
+
+    private void finishSubscriptionScan(FeedSourceContext context, CheckpointKey key,
+                                        FeedCheckpoint checkpoint, SubscriptionScanResult scan) {
+        if (scan == null || scan.tags == null || mFeedSourceContext != context) return;
+        Context appContext = getEHContext();
+        if (appContext == null) return;
+        EhApplication.saveUserTagList(appContext, scan.tags);
+        SubscriptionSnapshot.replace(scan.tags);
+        SubscriptionRepository repository = SubscriptionRepository.getInstance();
+        repository.execute(() -> {
+            repository.replaceTagSnapshot(key.accountKey, scan.tags.userTags);
+            Set<String> tags = new LinkedHashSet<>();
+            for (UserTag tag : scan.tags.userTags) {
+                if (tag.watched && !tag.hidden) tags.add(SubscriptionRepository.normalizeTagName(tag.tagName));
+            }
+            SubscriptionUpdateCalculator.Outcome outcome = SubscriptionUpdateCalculator.calculate(
+                    checkpoint.current, scan.galleries, tags, scan.reachedPageLimit);
+            if (!outcome.complete || mFeedSourceContext != context) return;
+            repository.commitAggregateUpdate(key, outcome.newBoundary, outcome.states);
+            MainActivity activity = getActivity2();
+            if (activity != null) activity.runOnUiThread(() -> {
+                if (mUrlBuilder == null || mHelper == null || mFeedSourceContext != context) return;
+                mVisibleFeedBoundary = checkpoint.current;
+                if (mFeedBoundaryDecoration != null) mFeedBoundaryDecoration.setBoundary(mVisibleFeedBoundary);
+                mUrlBuilder.setMode(ListUrlBuilder.MODE_SUBSCRIPTION);
+                mUrlBuilder.setKeyword(null);
+                mUrlBuilder.setPageIndex(0);
+                onUpdateUrlBuilder();
+                mHelper.refresh();
+                setState(STATE_NORMAL);
+            });
+        });
     }
 
     @Override
@@ -1173,6 +1363,11 @@ public final class GalleryListScene extends BaseScene
     public void onAutoAppendChineseChanged() {
         if (mUrlBuilder == null || mHelper == null || !mUrlBuilder.supportsChineseFilter()) {
             return;
+        }
+        if (mFeedSourceContext != null) {
+            setFeedSource(mFeedSourceContext.type, mFeedSourceContext.sourceKey,
+                    mFeedSourceContext.type == FeedSourceContext.Type.SUBSCRIPTION_TAG
+                            ? "" : mUrlBuilder.getKeyword());
         }
         mUrlBuilder.setPageIndex(0);
         onUpdateUrlBuilder();
@@ -1796,6 +1991,9 @@ public final class GalleryListScene extends BaseScene
         if (query != null) {
             query = query.replace("\r", "").replace("\n", "");
         }
+        setFeedSource(mUrlBuilder.getMode() == ListUrlBuilder.MODE_SUBSCRIPTION
+                        ? FeedSourceContext.Type.SUBSCRIPTION_AGGREGATE : FeedSourceContext.Type.TEMP_SEARCH,
+                mUrlBuilder.getMode() == ListUrlBuilder.MODE_SUBSCRIPTION ? "watched" : "", query);
 
         if (mState == STATE_SEARCH || mState == STATE_SEARCH_SHOW_LIST) {
             try {
@@ -1974,9 +2172,39 @@ public final class GalleryListScene extends BaseScene
             }
 
             mHelper.setEmptyString(emptyString);
+            handleSuccessfulFeed(result);
 //            mHelper.onGetPageData(taskId, result.pages, result.nextPage, result.galleryInfoList);
             mHelper.onGetPageData(taskId, result, result.galleryInfoList);
         }
+    }
+
+    private void handleSuccessfulFeed(GalleryListParser.Result result) {
+        FeedSourceContext context = mFeedSourceContext;
+        if (context == null || !context.persistsCheckpoint() || mUrlBuilder == null
+                || mUrlBuilder.getPageIndex() != 0 || result.galleryInfoList.isEmpty()
+                || context.type == FeedSourceContext.Type.SUBSCRIPTION_AGGREGATE) return;
+        long newest = 0;
+        long previousTime = Long.MAX_VALUE;
+        Set<Long> gids = new LinkedHashSet<>();
+        for (GalleryInfo gallery : result.galleryInfoList) {
+            long time = gallery.postedTimestamp;
+            if (time <= 0 || time > previousTime) return; // Invalid or not posted-time descending.
+            previousTime = time;
+            if (time > newest) {
+                newest = time;
+                gids.clear();
+                gids.add(gallery.gid);
+            } else if (time == newest) {
+                gids.add(gallery.gid);
+            }
+        }
+        if (newest == 0 || mFeedSourceContext != context) return;
+        FeedBoundary next = new FeedBoundary(newest, gids);
+        SubscriptionRepository.getInstance().execute(() -> {
+            if (mFeedSourceContext == context) {
+                SubscriptionRepository.getInstance().advanceCheckpoint(checkpointKey(context), next);
+            }
+        });
     }
 
     private void onGetGalleryListFailure(Exception e, int taskId) {

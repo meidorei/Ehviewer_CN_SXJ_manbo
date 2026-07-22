@@ -400,6 +400,7 @@ public class GalleryListParser {
         Element posted = e.getElementById("posted_" + gi.gid);
         if (posted != null) {
             gi.posted = posted.text().trim();
+            gi.postedTimestamp = ParserUtils.parsePostedTimestamp(gi.posted);
             gi.favoriteSlot = parseFavoriteSlot(posted.attr("style"));
         }
         if (gi.favoriteSlot == -2) {

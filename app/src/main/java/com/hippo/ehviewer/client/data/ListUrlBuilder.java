@@ -699,7 +699,7 @@ public class ListUrlBuilder implements Cloneable, Parcelable {
     }
 
     @Nullable
-    String getEffectiveKeyword(boolean autoAppendChinese) {
+    public String getEffectiveKeyword(boolean autoAppendChinese) {
         if (!shouldApplyChineseFilter(autoAppendChinese)) {
             return mKeyword;
         }
@@ -712,7 +712,7 @@ public class ListUrlBuilder implements Cloneable, Parcelable {
         return appendChineseFilter(mKeyword);
     }
 
-    int getEffectiveAdvanceSearch(boolean autoAppendChinese) {
+    public int getEffectiveAdvanceSearch(boolean autoAppendChinese) {
         if (mAdvanceSearch == -1 || !shouldApplyChineseFilter(autoAppendChinese)) {
             return mAdvanceSearch;
         }

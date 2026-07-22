@@ -15,6 +15,8 @@ public class UserTag implements Parcelable {
     public boolean hidden;
     public String color;
     public int tagWeight;
+    /** Transient follow-update badge, populated from the local count snapshot. */
+    public String followCount;
 
     public UserTag(){
 
@@ -53,6 +55,7 @@ public class UserTag implements Parcelable {
         dest.writeByte(watched ? (byte) 1 : (byte) 0);
         dest.writeByte(hidden ? (byte) 1 : (byte) 0);
         dest.writeString(this.color);
+        dest.writeInt(this.tagWeight);
     }
 
     public String getName(EhTagDatabase ehTags) {
