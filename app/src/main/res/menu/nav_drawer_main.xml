@@ -74,4 +74,14 @@
 
     </group>
 
+    <group
+        android:id="@+id/nav_group_filters"
+        android:checkableBehavior="all">
+        <item
+            android:id="@+id/nav_auto_append_chinese"
+            android:checkable="true"
+            android:icon="@drawable/ic_baseline_filter_24"
+            android:title="@string/auto_append_chinese" />
+    </group>
+
 </menu>

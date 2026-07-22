@@ -1170,6 +1170,15 @@ public final class GalleryListScene extends BaseScene
         drawPager.setAdapter(pagerAdapter);
     }
 
+    public void onAutoAppendChineseChanged() {
+        if (mUrlBuilder == null || mHelper == null || !mUrlBuilder.supportsChineseFilter()) {
+            return;
+        }
+        mUrlBuilder.setPageIndex(0);
+        onUpdateUrlBuilder();
+        mHelper.refresh();
+    }
+
     private boolean checkDoubleClickExit() {
         if (getStackIndex() != 0) {
             return false;
@@ -2100,7 +2109,7 @@ public final class GalleryListScene extends BaseScene
                         mUrlBuilder.isOnlySearchCovers(), mUrlBuilder.isShowExpunged());
                 mClient.execute(request);
             } else {
-                String url = mUrlBuilder.build();
+                String url = mUrlBuilder.build(Settings.getAutoAppendChinese());
                 EhRequest request = new EhRequest();
                 request.setMethod(EhClient.METHOD_GET_GALLERY_LIST);
                 request.setCallback(new GetGalleryListListener(getContext(),

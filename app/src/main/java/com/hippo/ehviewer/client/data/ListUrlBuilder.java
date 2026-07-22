@@ -54,6 +54,9 @@ public class ListUrlBuilder implements Cloneable, Parcelable {
 
     private static final Pattern  PATTERN_SEEK_DATE = Pattern.compile("seek=(\\d+)-(\\d+)-(\\d+)");
     private static final Pattern  PATTERN_JUMP_NODE = Pattern.compile("jump=(\\d)[ymwd]");
+    private static final Pattern PATTERN_POSITIVE_LANGUAGE = Pattern.compile(
+            "(?i)(?:^|\\s)~?(?:l|lang|language):");
+    private static final String CHINESE_LANGUAGE_FILTER = "l:chinese";
 
     // Mode
     public static final int MODE_NORMAL = 0x0;
@@ -551,6 +554,17 @@ public class ListUrlBuilder implements Cloneable, Parcelable {
     }
 
     public String build() {
+        return build(false);
+    }
+
+    /**
+     * Builds a gallery-list URL, optionally adding a Chinese language filter to
+     * search-compatible list modes. The stored keyword and mode are never changed.
+     */
+    public String build(boolean autoAppendChinese) {
+        boolean applyChinese = shouldApplyChineseFilter(autoAppendChinese);
+        String effectiveKeyword = getEffectiveKeyword(autoAppendChinese);
+        int effectiveAdvanceSearch = getEffectiveAdvanceSearch(autoAppendChinese);
         switch (mMode) {
             default:
             case MODE_NORMAL:
@@ -567,11 +581,11 @@ public class ListUrlBuilder implements Cloneable, Parcelable {
                     ub.addQuery("f_cats", (~mCategory) & EhConfig.ALL_CATEGORY);
                 }
                 // Search key
-                if (mKeyword != null) {
-                    String keyword = mKeyword.trim();
+                if (effectiveKeyword != null) {
+                    String keyword = effectiveKeyword.trim();
                     if (!keyword.isEmpty()) {
                         try {
-                            ub.addQuery("f_search", URLEncoder.encode(mKeyword, "UTF-8"));
+                            ub.addQuery("f_search", URLEncoder.encode(effectiveKeyword, "UTF-8"));
                         } catch (UnsupportedEncodingException e) {
                             // Empty
                         }
@@ -582,19 +596,19 @@ public class ListUrlBuilder implements Cloneable, Parcelable {
                     ub.addQuery("page", mPageIndex);
                 }
                 // Advance search
-                if (mAdvanceSearch != -1) {
+                if (effectiveAdvanceSearch != -1) {
                     ub.addQuery("advsearch", "1");
-                    if((mAdvanceSearch & AdvanceSearchTable.SNAME) != 0) ub.addQuery("f_sname", "on");
-                    if((mAdvanceSearch & AdvanceSearchTable.STAGS) != 0) ub.addQuery("f_stags", "on");
-                    if((mAdvanceSearch & AdvanceSearchTable.SDESC) != 0) ub.addQuery("f_sdesc", "on");
-                    if((mAdvanceSearch & AdvanceSearchTable.STORR) != 0) ub.addQuery("f_storr", "on");
-                    if((mAdvanceSearch & AdvanceSearchTable.STO) != 0) ub.addQuery("f_sto", "on");
-                    if((mAdvanceSearch & AdvanceSearchTable.SDT1) != 0) ub.addQuery("f_sdt1", "on");
-                    if((mAdvanceSearch & AdvanceSearchTable.SDT2) != 0) ub.addQuery("f_sdt2", "on");
-                    if((mAdvanceSearch & AdvanceSearchTable.SH) != 0) ub.addQuery("f_sh", "on");
-                    if((mAdvanceSearch & AdvanceSearchTable.SFL) != 0) ub.addQuery("f_sfl", "on");
-                    if((mAdvanceSearch & AdvanceSearchTable.SFU) != 0) ub.addQuery("f_sfu", "on");
-                    if((mAdvanceSearch & AdvanceSearchTable.SFT) != 0) ub.addQuery("f_sft", "on");
+                    if((effectiveAdvanceSearch & AdvanceSearchTable.SNAME) != 0) ub.addQuery("f_sname", "on");
+                    if((effectiveAdvanceSearch & AdvanceSearchTable.STAGS) != 0) ub.addQuery("f_stags", "on");
+                    if((effectiveAdvanceSearch & AdvanceSearchTable.SDESC) != 0) ub.addQuery("f_sdesc", "on");
+                    if((effectiveAdvanceSearch & AdvanceSearchTable.STORR) != 0) ub.addQuery("f_storr", "on");
+                    if((effectiveAdvanceSearch & AdvanceSearchTable.STO) != 0) ub.addQuery("f_sto", "on");
+                    if((effectiveAdvanceSearch & AdvanceSearchTable.SDT1) != 0) ub.addQuery("f_sdt1", "on");
+                    if((effectiveAdvanceSearch & AdvanceSearchTable.SDT2) != 0) ub.addQuery("f_sdt2", "on");
+                    if((effectiveAdvanceSearch & AdvanceSearchTable.SH) != 0) ub.addQuery("f_sh", "on");
+                    if((effectiveAdvanceSearch & AdvanceSearchTable.SFL) != 0) ub.addQuery("f_sfl", "on");
+                    if((effectiveAdvanceSearch & AdvanceSearchTable.SFU) != 0) ub.addQuery("f_sfu", "on");
+                    if((effectiveAdvanceSearch & AdvanceSearchTable.SFT) != 0) ub.addQuery("f_sft", "on");
                     // Set min star
                     if (mMinRating != -1) {
                         ub.addQuery("f_sr", "on");
@@ -610,6 +624,9 @@ public class ListUrlBuilder implements Cloneable, Parcelable {
                 return ub.build();
             }
             case MODE_UPLOADER: {
+                if (applyChinese) {
+                    return buildSearchUrl(effectiveKeyword);
+                }
                 StringBuilder sb = new StringBuilder(EhUrl.getHost());
                 sb.append("uploader/");
                 try {
@@ -623,6 +640,9 @@ public class ListUrlBuilder implements Cloneable, Parcelable {
                 return sb.toString();
             }
             case MODE_TAG: {
+                if (applyChinese) {
+                    return buildSearchUrl(effectiveKeyword);
+                }
                 StringBuilder sb = new StringBuilder(EhUrl.getHost());
                 sb.append("tag/");
                 try {
@@ -644,7 +664,7 @@ public class ListUrlBuilder implements Cloneable, Parcelable {
                 }
                 sb.append("f_search=");
                 try {
-                    sb.append(URLEncoder.encode(mKeyword, "UTF-8"));
+                    sb.append(URLEncoder.encode(effectiveKeyword, "UTF-8"));
                 } catch (UnsupportedEncodingException e) {
                     // Empty
                 }
@@ -669,6 +689,80 @@ public class ListUrlBuilder implements Cloneable, Parcelable {
                     return "127.0.0.1:8888";
                 }
                 return sb.toString();
+        }
+    }
+
+    public boolean supportsChineseFilter() {
+        return mMode == MODE_NORMAL || mMode == MODE_SUBSCRIPTION
+                || mMode == MODE_TAG || mMode == MODE_UPLOADER
+                || mMode == MODE_FILTER;
+    }
+
+    @Nullable
+    String getEffectiveKeyword(boolean autoAppendChinese) {
+        if (!shouldApplyChineseFilter(autoAppendChinese)) {
+            return mKeyword;
+        }
+        if (mMode == MODE_TAG) {
+            return toExactTagSearch(mKeyword) + " " + CHINESE_LANGUAGE_FILTER;
+        }
+        if (mMode == MODE_UPLOADER) {
+            return "uploader:\"" + mKeyword + "\" " + CHINESE_LANGUAGE_FILTER;
+        }
+        return appendChineseFilter(mKeyword);
+    }
+
+    int getEffectiveAdvanceSearch(boolean autoAppendChinese) {
+        if (mAdvanceSearch == -1 || !shouldApplyChineseFilter(autoAppendChinese)) {
+            return mAdvanceSearch;
+        }
+        return mAdvanceSearch | AdvanceSearchTable.STAGS;
+    }
+
+    private boolean shouldApplyChineseFilter(boolean autoAppendChinese) {
+        return autoAppendChinese && supportsChineseFilter()
+                && !hasPositiveLanguageCondition(mKeyword);
+    }
+
+    private static boolean hasPositiveLanguageCondition(@Nullable String keyword) {
+        return keyword != null && PATTERN_POSITIVE_LANGUAGE.matcher(keyword).find();
+    }
+
+    private static String appendChineseFilter(@Nullable String keyword) {
+        if (keyword == null || keyword.trim().isEmpty()) {
+            return CHINESE_LANGUAGE_FILTER;
+        }
+        return keyword.trim() + " " + CHINESE_LANGUAGE_FILTER;
+    }
+
+    private static String toExactTagSearch(String tag) {
+        String keyword = tag.trim();
+        int namespaceEnd = keyword.indexOf(':');
+        String prefix = namespaceEnd >= 0 ? keyword.substring(0, namespaceEnd + 1) : "";
+        String value = namespaceEnd >= 0 ? keyword.substring(namespaceEnd + 1) : keyword;
+        if (!value.endsWith("$")) {
+            value += "$";
+        }
+        if (value.indexOf(' ') >= 0 && !(value.startsWith("\"") && value.endsWith("\""))) {
+            value = "\"" + value + "\"";
+        }
+        return prefix + value;
+    }
+
+    private String buildSearchUrl(String keyword) {
+        UrlBuilder ub = new UrlBuilder(EhUrl.getHost());
+        ub.addQuery("f_search", encodeKeyword(keyword));
+        if (mPageIndex != 0) {
+            ub.addQuery("page", mPageIndex);
+        }
+        return ub.build();
+    }
+
+    private static String encodeKeyword(String keyword) {
+        try {
+            return URLEncoder.encode(keyword, "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            return keyword;
         }
     }
 

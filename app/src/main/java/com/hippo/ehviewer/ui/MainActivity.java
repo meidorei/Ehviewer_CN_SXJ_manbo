@@ -58,6 +58,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.appcompat.app.AlertDialog;
+import androidx.fragment.app.Fragment;
 
 import com.google.android.material.navigation.NavigationView;
 import com.google.android.material.snackbar.Snackbar;
@@ -415,6 +416,10 @@ public final class MainActivity extends StageActivity
 //                newsItem.setVisible(true);
 //            }
             mNavView.setNavigationItemSelectedListener(this);
+            MenuItem autoChineseItem = mNavView.getMenu().findItem(R.id.nav_auto_append_chinese);
+            if (autoChineseItem != null) {
+                autoChineseItem.setChecked(Settings.getAutoAppendChinese());
+            }
         }
         if (Settings.getTheme() == 0) {
             mChangeTheme.setTextColor(getColor(R.color.theme_change_light));
@@ -879,6 +884,17 @@ public final class MainActivity extends StageActivity
     @SuppressLint({"NonConstantResourceId", "RtlHardcoded"})
     @Override
     public boolean onNavigationItemSelected(MenuItem item) {
+        if (item.getItemId() == R.id.nav_auto_append_chinese) {
+            boolean enabled = !Settings.getAutoAppendChinese();
+            Settings.putAutoAppendChinese(enabled);
+            item.setChecked(enabled);
+            refreshVisibleGalleryListForChineseFilter();
+            if (mDrawerLayout != null) {
+                mDrawerLayout.closeDrawers();
+            }
+            return false;
+        }
+
         // Don't select twice
         if (item.isChecked()) {
             return false;
@@ -936,6 +952,17 @@ public final class MainActivity extends StageActivity
             limitsCountView.hide();
         }
         return true;
+    }
+
+    private void refreshVisibleGalleryListForChineseFilter() {
+        List<Fragment> fragments = getSupportFragmentManager().getFragments();
+        for (int i = fragments.size() - 1; i >= 0; i--) {
+            Fragment fragment = fragments.get(i);
+            if (fragment instanceof GalleryListScene && fragment.isVisible()) {
+                ((GalleryListScene) fragment).onAutoAppendChineseChanged();
+                return;
+            }
+        }
     }
 
     @Override

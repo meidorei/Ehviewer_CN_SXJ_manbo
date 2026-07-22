@@ -172,6 +172,16 @@ public class Settings {
         sSettingsPre.edit().putBoolean(key, value).apply();
     }
 
+    private static final String KEY_AUTO_APPEND_CHINESE = "auto_append_chinese";
+
+    public static boolean getAutoAppendChinese() {
+        return getBoolean(KEY_AUTO_APPEND_CHINESE, false);
+    }
+
+    public static void putAutoAppendChinese(boolean value) {
+        putBoolean(KEY_AUTO_APPEND_CHINESE, value);
+    }
+
     public static int getInt(String key, int defValue) {
         try {
             return sSettingsPre.getInt(key, defValue);

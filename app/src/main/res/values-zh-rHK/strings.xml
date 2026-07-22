@@ -1039,4 +1039,5 @@
     <string name="imported_archive_info_message">這是從本機儲存空間匯入的項目</string>
     <string name="imported_archive_category">本機匯入</string>
 
+    <string name="auto_append_chinese">自動拼接中文</string>
 </resources>
