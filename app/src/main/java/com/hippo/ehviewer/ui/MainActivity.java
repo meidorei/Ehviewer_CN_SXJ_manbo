@@ -416,10 +416,7 @@ public final class MainActivity extends StageActivity
 //                newsItem.setVisible(true);
 //            }
             mNavView.setNavigationItemSelectedListener(this);
-            MenuItem autoChineseItem = mNavView.getMenu().findItem(R.id.nav_auto_append_chinese);
-            if (autoChineseItem != null) {
-                autoChineseItem.setChecked(Settings.getAutoAppendChinese());
-            }
+            syncAutoAppendChineseMenuItem();
         }
         if (Settings.getTheme() == 0) {
             mChangeTheme.setTextColor(getColor(R.color.theme_change_light));
@@ -850,6 +847,18 @@ public final class MainActivity extends StageActivity
             } else {
                 mNavView.setCheckedItem(resId);
             }
+            // NavigationView#setCheckedItem may clear other checked menu items.
+            syncAutoAppendChineseMenuItem();
+        }
+    }
+
+    private void syncAutoAppendChineseMenuItem() {
+        if (mNavView == null) {
+            return;
+        }
+        MenuItem item = mNavView.getMenu().findItem(R.id.nav_auto_append_chinese);
+        if (item != null) {
+            item.setChecked(Settings.getAutoAppendChinese());
         }
     }
 
@@ -988,6 +997,7 @@ public final class MainActivity extends StageActivity
 
     @Override
     public void onDrawerOpened(View drawerView) {
+        syncAutoAppendChineseMenuItem();
         if (limitsCountView != null) {
             limitsCountView.onLoadData(drawerView, true);
         }
