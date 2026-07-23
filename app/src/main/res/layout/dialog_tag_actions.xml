@@ -7,7 +7,7 @@
     <TextView
         android:id="@+id/tag_action_definition"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
+        android:layout_height="40dp"
         android:background="?android:attr/selectableItemBackground"
         android:gravity="center_vertical"
         android:paddingStart="24dp"
@@ -29,10 +29,10 @@
             android:layout_weight="1"
             android:background="?android:attr/selectableItemBackground"
             android:gravity="center"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
             android:text="@string/add_filter"
-            android:textAppearance="?android:attr/textAppearanceListItem" />
+            android:textSize="16sp" />
 
         <TextView
             android:id="@+id/tag_action_exclude"
@@ -41,10 +41,10 @@
             android:layout_weight="1"
             android:background="?android:attr/selectableItemBackground"
             android:gravity="center"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
             android:text="@string/subscription_hidden"
-            android:textAppearance="?android:attr/textAppearanceListItem" />
+            android:textSize="16sp" />
     </LinearLayout>
 
 </LinearLayout>

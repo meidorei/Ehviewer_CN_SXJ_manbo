@@ -3,6 +3,7 @@
 
 ### [常见问题汇总](https://github.com/xiaojieonly/Ehviewer_CN_SXJ/blob/BiLi_PC_Gamer/feedauthor/EhviewerIssue.md)
 ![Icon](fastlane/metadata/android/en-US/images/icon.png)
+![](图标.png)
 
 这是一个 E-Hentai Android 平台的浏览器。
 

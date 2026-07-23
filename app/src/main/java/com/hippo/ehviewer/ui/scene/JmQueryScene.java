@@ -22,7 +22,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.FragmentActivity;
 
-import com.google.android.material.textfield.TextInputLayout;
 import com.hippo.ehviewer.EhApplication;
 import com.hippo.ehviewer.R;
 import com.hippo.ehviewer.UrlOpener;
@@ -53,7 +52,6 @@ public final class JmQueryScene extends ToolbarScene implements View.OnClickList
     private String savedInput = "";
     private JmAlbumInfo albumInfo;
 
-    private TextInputLayout inputLayout;
     private EditText input;
     private Button queryButton;
     private ProgressBar progress;
@@ -89,7 +87,6 @@ public final class JmQueryScene extends ToolbarScene implements View.OnClickList
     public View onCreateView3(LayoutInflater inflater, @Nullable ViewGroup container,
             @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.scene_jm_query, container, false);
-        inputLayout = view.findViewById(R.id.jm_input_layout);
         input = view.findViewById(R.id.jm_input);
         queryButton = view.findViewById(R.id.jm_query_button);
         progress = view.findViewById(R.id.jm_progress);
@@ -122,7 +119,6 @@ public final class JmQueryScene extends ToolbarScene implements View.OnClickList
         super.onViewCreated(view, savedInstanceState);
         setTitle(R.string.jm_query_title);
         setNavigationIcon(R.drawable.v_arrow_left_dark_x24);
-        setNavCheckedItem(0);
     }
 
     @Override
@@ -136,7 +132,6 @@ public final class JmQueryScene extends ToolbarScene implements View.OnClickList
     public void onDestroyView() {
         savedInput = input == null ? savedInput : input.getText().toString();
         cancelRequests();
-        inputLayout = null;
         input = null;
         queryButton = null;
         progress = null;
@@ -188,10 +183,10 @@ public final class JmQueryScene extends ToolbarScene implements View.OnClickList
         try {
             albumId = JmIdParser.parse(input.getText().toString());
         } catch (IllegalArgumentException e) {
-            inputLayout.setError(getString(R.string.jm_invalid_number));
+            input.setError(getString(R.string.jm_invalid_number));
             return;
         }
-        inputLayout.setError(null);
+        input.setError(null);
         cancelRequests();
         int requestGeneration = generation.incrementAndGet();
         setLoading(true);

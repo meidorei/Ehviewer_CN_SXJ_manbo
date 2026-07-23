@@ -76,6 +76,11 @@ class GalleryListSceneDialog(val baseScene: BaseScene) {
             requestTag(tagName, false)
         }
         dialog.show()
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.apply {
+            textSize = 17f
+            minWidth = (96 * resources.displayMetrics.density).toInt()
+            minHeight = (48 * resources.displayMetrics.density).toInt()
+        }
     }
 
     private fun showFilterTagDialog() {
