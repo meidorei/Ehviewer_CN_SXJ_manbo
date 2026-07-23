@@ -169,7 +169,6 @@ public final class JmClient {
         String timestamp = String.valueOf(System.currentTimeMillis() / 1000L);
         Request request = new Request.Builder()
                 .url("https://" + domain + path)
-                .header("Accept-Encoding", "gzip, deflate")
                 .header("User-Agent", USER_AGENT)
                 .header("token", JmApiCodec.token(timestamp))
                 .header("tokenparam", JmApiCodec.tokenParam(timestamp, version))
