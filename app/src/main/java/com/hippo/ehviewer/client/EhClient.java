@@ -122,6 +122,19 @@ public class EhClient {
             return mEhConfig;
         }
 
+        /** Posts engine progress back to callbacks interested in it. */
+        public void reportProgress(int progress, int max) {
+            Callback callback = mCallback;
+            if (callback instanceof ProgressCallback) {
+                SimpleHandler.getInstance().post(() -> {
+                    Callback current = mCallback;
+                    if (current == callback && current instanceof ProgressCallback) {
+                        ((ProgressCallback) current).onProgress(progress, max);
+                    }
+                });
+            }
+        }
+
         public void stop() {
             if (!mStop.get()) {
                 mStop.lazySet(true);
@@ -252,5 +265,9 @@ public class EhClient {
         void onFailure(Exception e);
 
         void onCancel();
+    }
+
+    public interface ProgressCallback<E> extends Callback<E> {
+        void onProgress(int progress, int max);
     }
 }

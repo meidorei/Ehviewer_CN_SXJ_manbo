@@ -323,8 +323,10 @@ public class EhEngine {
                                                             long boundaryTime,
                                                             Set<Long> boundaryGids) throws Throwable {
         SubscriptionScanResult scan = new SubscriptionScanResult();
+        if (task != null) task.reportProgress(0, 100);
         scan.tags = getWatchedList(task, client, tagUrl);
         if (scan.tags == null) throw new ParseException("Unable to load subscription tags", "");
+        if (task != null) task.reportProgress(10, 100);
         FeedBoundary boundary = new FeedBoundary(boundaryTime, boundaryGids);
         Map<Long, GalleryInfo> unique = new LinkedHashMap<>();
         String url = watchedUrl;
@@ -337,6 +339,7 @@ public class EhEngine {
                 fillGalleryListByApi(task, client, result.galleryInfoList, url);
             }
             scan.pagesScanned++;
+            if (task != null) task.reportProgress(10 + scan.pagesScanned * 20, 100);
             for (GalleryInfo gallery : result.galleryInfoList) {
                 unique.put(gallery.gid, gallery);
                 if (!boundary.isEmpty() && boundary.isFirstOld(gallery.postedTimestamp, gallery.gid)) {
@@ -351,6 +354,7 @@ public class EhEngine {
         }
         scan.galleries.addAll(unique.values());
         scan.reachedPageLimit = scan.pagesScanned == 4 && !scan.reachedBoundary;
+        if (task != null) task.reportProgress(95, 100);
         return scan;
     }
 

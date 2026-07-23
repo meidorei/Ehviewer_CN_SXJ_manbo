@@ -113,6 +113,7 @@ import com.hippo.ehviewer.subscription.QuerySignatureFactory;
 import com.hippo.ehviewer.subscription.SearchQueryPolicy;
 import com.hippo.ehviewer.subscription.SubscriptionRepository;
 import com.hippo.ehviewer.subscription.SubscriptionScanResult;
+import com.hippo.ehviewer.subscription.SubscriptionRefreshStatus;
 import com.hippo.ehviewer.subscription.SubscriptionSnapshot;
 import com.hippo.ehviewer.subscription.SubscriptionUpdateCalculator;
 import com.hippo.ehviewer.util.TagTranslationUtil;
@@ -1254,19 +1255,33 @@ public final class GalleryListScene extends BaseScene
             Context callbackContext = getEHContext();
             if (activity == null || callbackContext == null || mFeedSourceContext != context) return;
             activity.runOnUiThread(() -> {
+                if (mSubscriptionDraw != null) mSubscriptionDraw.showRefreshProgress(0, 100);
                 EhRequest request = new EhRequest().setMethod(EhClient.METHOD_SCAN_SUBSCRIPTIONS)
                         .setArgs(watchedUrl, EhUrl.getMyTag(), checkpoint.current.time,
                                 SubscriptionRepository.serializeGids(checkpoint.current.gids))
-                        .setCallback(new EhClient.Callback<SubscriptionScanResult>() {
+                        .setCallback(new EhClient.ProgressCallback<SubscriptionScanResult>() {
+                            @Override public void onProgress(int progress, int max) {
+                                if (mSubscriptionDraw != null) {
+                                    mSubscriptionDraw.showRefreshProgress(progress, max);
+                                }
+                            }
+
                             @Override public void onSuccess(SubscriptionScanResult result) {
                                 finishSubscriptionScan(context, key, checkpoint, result);
                             }
 
                             @Override public void onFailure(Exception e) {
+                                if (mSubscriptionDraw != null) mSubscriptionDraw.showRefreshResult(
+                                        SubscriptionRefreshStatus.Result.FAILURE,
+                                        System.currentTimeMillis());
                                 showTip(e.getMessage(), LENGTH_LONG);
                             }
 
-                            @Override public void onCancel() {}
+                            @Override public void onCancel() {
+                                if (mSubscriptionDraw != null) mSubscriptionDraw.showRefreshResult(
+                                        SubscriptionRefreshStatus.Result.CANCELLED,
+                                        System.currentTimeMillis());
+                            }
                         });
                 mClient.execute(request);
             });
@@ -1289,11 +1304,22 @@ public final class GalleryListScene extends BaseScene
             }
             SubscriptionUpdateCalculator.Outcome outcome = SubscriptionUpdateCalculator.calculate(
                     checkpoint.current, scan.galleries, tags, scan.reachedPageLimit);
-            if (!outcome.complete || mFeedSourceContext != context) return;
+            if (!outcome.complete) {
+                MainActivity failedActivity = getActivity2();
+                if (failedActivity != null) failedActivity.runOnUiThread(() -> {
+                    if (mSubscriptionDraw != null) mSubscriptionDraw.showRefreshResult(
+                            SubscriptionRefreshStatus.Result.FAILURE,
+                            System.currentTimeMillis());
+                });
+                return;
+            }
+            if (mFeedSourceContext != context) return;
             repository.commitAggregateUpdate(key, outcome.newBoundary, outcome.states);
             MainActivity activity = getActivity2();
             if (activity != null) activity.runOnUiThread(() -> {
                 if (mUrlBuilder == null || mHelper == null || mFeedSourceContext != context) return;
+                if (mSubscriptionDraw != null) mSubscriptionDraw.showRefreshResult(
+                        SubscriptionRefreshStatus.Result.SUCCESS, System.currentTimeMillis());
                 mVisibleFeedBoundary = checkpoint.current;
                 if (mFeedBoundaryDecoration != null) mFeedBoundaryDecoration.setBoundary(mVisibleFeedBoundary);
                 mUrlBuilder.setMode(ListUrlBuilder.MODE_SUBSCRIPTION);

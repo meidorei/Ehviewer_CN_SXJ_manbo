@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.view.LayoutInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.AbsListView;
 import android.widget.FrameLayout;
@@ -32,6 +33,7 @@ import com.hippo.ehviewer.ui.scene.EhCallback;
 import com.hippo.ehviewer.subscription.QuerySignatureFactory;
 import com.hippo.ehviewer.subscription.SearchQueryPolicy;
 import com.hippo.ehviewer.subscription.SubscriptionRepository;
+import com.hippo.ehviewer.subscription.SubscriptionRefreshStatus;
 import com.hippo.ehviewer.subscription.SubscriptionSnapshot;
 import com.hippo.ehviewer.subscription.TagUpdateState;
 import com.hippo.scene.Announcer;
@@ -40,7 +42,10 @@ import com.hippo.widget.ProgressView;
 import com.hippo.lib.yorozuya.AssertUtils;
 import com.hippo.lib.yorozuya.ViewUtils;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
+import java.util.Locale;
 import java.util.Map;
 
 import static com.hippo.ehviewer.Settings.*;
@@ -73,6 +78,7 @@ public class SubscriptionDraw {
 
     private String tagName;
     private SubscriptionItemAdapter adapter;
+    private TextView refreshStatusView;
 
 
 
@@ -110,6 +116,12 @@ public class SubscriptionDraw {
         toolbar.setLogo(R.drawable.ic_baseline_subscriptions_24);
         toolbar.setTitle(R.string.subscription);
         toolbar.inflateMenu(R.menu.drawer_gallery_list);
+        MenuItem refreshItem = toolbar.getMenu().findItem(R.id.action_refresh);
+        View refreshAction = inflater.inflate(R.layout.action_subscription_refresh, toolbar, false);
+        refreshStatusView = refreshAction.findViewById(R.id.subscription_refresh_status);
+        refreshAction.setOnClickListener(view -> callback.onSubscriptionRefresh());
+        refreshItem.setActionView(refreshAction);
+        restoreRefreshStatus();
         toolbar.setOnMenuItemClickListener(item -> {  //点击增加快速搜索按钮触发
             int id = item.getItemId();
             switch (id) {
@@ -137,6 +149,33 @@ public class SubscriptionDraw {
         }
 
         return subscriptionView;
+    }
+
+    public void showRefreshProgress(int progress, int max) {
+        if (refreshStatusView == null) return;
+        refreshStatusView.setVisibility(View.VISIBLE);
+        refreshStatusView.setText(progress + "/" + max);
+    }
+
+    public void showRefreshResult(SubscriptionRefreshStatus.Result result, long time) {
+        String account = SubscriptionRepository.getInstance().getAccountKey();
+        SubscriptionRefreshStatus.save(account, result, time);
+        if (refreshStatusView == null) return;
+        String formatted = new SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+                .format(new Date(time));
+        int stringId = result == SubscriptionRefreshStatus.Result.SUCCESS
+                ? R.string.subscription_refresh_last
+                : result == SubscriptionRefreshStatus.Result.FAILURE
+                ? R.string.subscription_refresh_failed
+                : R.string.subscription_refresh_cancelled;
+        refreshStatusView.setText(context.getString(stringId, formatted));
+        refreshStatusView.setVisibility(View.VISIBLE);
+    }
+
+    private void restoreRefreshStatus() {
+        SubscriptionRefreshStatus status = SubscriptionRefreshStatus.read(
+                SubscriptionRepository.getInstance().getAccountKey());
+        if (status != null) showRefreshResult(status.result, status.time);
     }
 
     public void setUserTagList(UserTagList tagList){

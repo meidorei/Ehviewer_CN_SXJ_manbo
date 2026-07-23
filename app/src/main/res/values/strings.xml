@@ -349,6 +349,9 @@
     <string name="refresh">Refresh</string>
     <string name="last_update_marker">Last update reached here</string>
     <string name="subscription_refresh_cooldown">Follow update is cooling down. Please try again shortly.</string>
+    <string name="subscription_refresh_last">Last %1$s</string>
+    <string name="subscription_refresh_failed">Failed %1$s</string>
+    <string name="subscription_refresh_cancelled">Cancelled %1$s</string>
     <string name="open_in_other_app">Open with other app</string>
     <string name="rate_successfully">Rate successfully</string>
     <string name="rate_failed">Rate failed</string>
