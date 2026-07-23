@@ -55,6 +55,7 @@ import com.hippo.ehviewer.dao.LocalFavoritesDao;
 import com.hippo.ehviewer.dao.QuickSearch;
 import com.hippo.ehviewer.dao.QuickSearchDao;
 import com.hippo.ehviewer.download.DownloadManager;
+import com.hippo.ehviewer.subscription.SubscriptionSchema;
 import com.hippo.util.ExceptionUtils;
 import com.hippo.util.SqlUtils;
 import com.hippo.lib.yorozuya.IOUtils;
@@ -174,7 +175,16 @@ public class EhDB {
                     Log.w("EhDB", "Failed to add ARCHIVE_URI column, might already exist", e);
                     Analytics.recordException(e);
                 }
+            case 7: // 7 to 8, additive follow-update tables
+                SubscriptionSchema.createTables(db);
         }
+    }
+
+    public static synchronized org.greenrobot.greendao.database.Database getDatabase() {
+        if (sDaoSession == null) {
+            throw new IllegalStateException("EhDB is not initialized");
+        }
+        return sDaoSession.getDatabase();
     }
 
     private static class OldDBHelper extends SQLiteOpenHelper {

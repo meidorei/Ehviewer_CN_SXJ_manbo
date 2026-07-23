@@ -15,6 +15,11 @@
   -->
 
 <resources>
+    <string name="last_update_marker">上次更新到这里</string>
+    <string name="subscription_refresh_cooldown">追更刷新冷却中，请稍后再试</string>
+    <string name="subscription_refresh_last">上次 %1$s</string>
+    <string name="subscription_refresh_failed">失败 %1$s</string>
+    <string name="subscription_refresh_cancelled">取消 %1$s</string>
 
     <string name="app_name">EhViewer</string>
 

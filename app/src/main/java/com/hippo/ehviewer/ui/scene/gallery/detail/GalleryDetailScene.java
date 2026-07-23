@@ -82,6 +82,7 @@ import com.hippo.ehviewer.client.data.GalleryTagGroup;
 import com.hippo.ehviewer.client.data.ListUrlBuilder;
 import com.hippo.ehviewer.client.data.PreviewSet;
 import com.hippo.ehviewer.client.data.userTag.UserTagList;
+import com.hippo.ehviewer.subscription.SubscriptionSnapshot;
 import com.hippo.ehviewer.client.exception.NoHAtHClientException;
 import com.hippo.ehviewer.client.parser.RateGalleryParser;
 import com.hippo.ehviewer.dao.DownloadInfo;
@@ -432,6 +433,11 @@ public class GalleryDetailScene extends BaseScene implements View.OnClickListene
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        Context snapshotContext = getEHContext();
+        if (snapshotContext != null && SubscriptionSnapshot.version() == 0) {
+            SubscriptionSnapshot.replace(EhApplication.getUserTagList(snapshotContext));
+        }
 
         if (savedInstanceState == null) {
             onInit();
@@ -1102,6 +1108,7 @@ public class GalleryDetailScene extends BaseScene implements View.OnClickListene
         ehTags = Settings.getShowTagTranslations() ? EhTagDatabase.getInstance(context) : null;
 
         int colorTag = AttrResources.getAttrColor(context, R.attr.tagBackgroundColor);
+        int colorSubscribedTag = AttrResources.getAttrColor(context, R.attr.subscribedTagBackgroundColor);
         int colorName = AttrResources.getAttrColor(context, R.attr.tagGroupBackgroundColor);
         for (GalleryTagGroup tg : tagGroups) {
             LinearLayout ll = (LinearLayout) inflater.inflate(R.layout.gallery_tag_group, mTags, false);
@@ -1136,8 +1143,10 @@ public class GalleryDetailScene extends BaseScene implements View.OnClickListene
                 }
 
                 tag.setText(readableTag != null ? readableTag : tagStr);
-                tag.setBackgroundDrawable(new RoundSideRectDrawable(colorTag));
-                tag.setTag(R.id.tag, tg.groupName + ":" + tagStr);
+                String rawTag = tg.groupName + ":" + tagStr;
+                tag.setBackgroundDrawable(new RoundSideRectDrawable(
+                        SubscriptionSnapshot.contains(rawTag) ? colorSubscribedTag : colorTag));
+                tag.setTag(R.id.tag, rawTag);
                 tag.setOnClickListener(this);
                 tag.setOnLongClickListener(this);
             }

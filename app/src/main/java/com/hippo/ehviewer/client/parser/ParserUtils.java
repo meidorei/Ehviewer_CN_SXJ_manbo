@@ -21,8 +21,10 @@ import com.hippo.lib.yorozuya.StringUtils;
 
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.text.ParseException;
 import java.util.Date;
 import java.util.Locale;
+import java.util.TimeZone;
 
 public class ParserUtils {
 
@@ -30,6 +32,20 @@ public class ParserUtils {
 
     public static synchronized String formatDate(long time) {
         return sDateFormat.format(new Date(time));
+    }
+
+    /** Parses the server's gallery-list date as UTC and returns Unix seconds. */
+    public static synchronized long parsePostedTimestamp(String value) {
+        if (value == null || value.trim().isEmpty()) return 0;
+        try {
+            SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US);
+            format.setLenient(false);
+            format.setTimeZone(TimeZone.getTimeZone("UTC"));
+            Date date = format.parse(value.trim());
+            return date == null ? 0 : date.getTime() / 1000;
+        } catch (ParseException ignored) {
+            return 0;
+        }
     }
 
     public static String trim(String str) {

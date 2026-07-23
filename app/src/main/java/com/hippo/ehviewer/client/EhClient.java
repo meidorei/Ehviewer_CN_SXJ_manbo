@@ -26,6 +26,7 @@ import com.hippo.ehviewer.EhApplication;
 import com.hippo.ehviewer.client.data.userTag.TagPushParam;
 import com.hippo.ehviewer.client.data.userTag.UserTag;
 import com.hippo.ehviewer.client.exception.CancelledException;
+import com.hippo.ehviewer.subscription.SubscriptionRepository;
 import com.hippo.util.ExceptionUtils;
 import com.hippo.util.IoThreadPoolExecutor;
 import com.hippo.lib.yorozuya.SimpleHandler;
@@ -69,6 +70,7 @@ public class EhClient {
     public static final int METHOD_GET_NEWS = 24;
     public static final int METHOD_GET_HOME = 25;
     public static final int METHOD_RESET_LIMIT = 26;
+    public static final int METHOD_SCAN_SUBSCRIPTIONS = 29;
 
     private final ThreadPoolExecutor mRequestThreadPool;
     private final OkHttpClient mOkHttpClient;
@@ -118,6 +120,19 @@ public class EhClient {
 
         public EhConfig getEhConfig() {
             return mEhConfig;
+        }
+
+        /** Posts engine progress back to callbacks interested in it. */
+        public void reportProgress(int progress, int max) {
+            Callback callback = mCallback;
+            if (callback instanceof ProgressCallback) {
+                SimpleHandler.getInstance().post(() -> {
+                    Callback current = mCallback;
+                    if (current == callback && current instanceof ProgressCallback) {
+                        ((ProgressCallback) current).onProgress(progress, max);
+                    }
+                });
+            }
         }
 
         public void stop() {
@@ -206,6 +221,10 @@ public class EhClient {
                         return EhEngine.getHomeDetail(this, mOkHttpClient);
                     case METHOD_RESET_LIMIT:
                         return EhEngine.resetLimit(this, mOkHttpClient);
+                    case METHOD_SCAN_SUBSCRIPTIONS:
+                        return EhEngine.scanSubscriptions(this, mOkHttpClient,
+                                (String) params[0], (String) params[1], (Long) params[2],
+                                SubscriptionRepository.parseGids((String) params[3]));
                     default:
                         return new IllegalStateException("Can't detect method " + mMethod);
                 }
@@ -246,5 +265,9 @@ public class EhClient {
         void onFailure(Exception e);
 
         void onCancel();
+    }
+
+    public interface ProgressCallback<E> extends Callback<E> {
+        void onProgress(int progress, int max);
     }
 }

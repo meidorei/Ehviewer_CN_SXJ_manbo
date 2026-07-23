@@ -52,6 +52,7 @@
         <item name="guideTextColor">?android:attr/textColorSecondaryInverse</item>
         <item name="tagGroupBackgroundColor">@color/tag_group_background_light</item>
         <item name="tagBackgroundColor">@color/tag_background_light</item>
+        <item name="subscribedTagBackgroundColor">@color/subscribed_tag_light</item>
         <item name="galleryDetailHeaderTitleColor">?android:attr/textColorPrimaryInverse</item>
         <item name="galleryDetailHeaderBackgroundColor">?attr/contentColorThemePrimary</item>
         <item name="galleryDetailButtonBackgroundColor">
@@ -123,6 +124,7 @@
         <item name="guideTextColor">?android:attr/textColorSecondary</item>
         <item name="tagGroupBackgroundColor">@color/tag_group_background_dark</item>
         <item name="tagBackgroundColor">@color/tag_background_dark</item>
+        <item name="subscribedTagBackgroundColor">@color/subscribed_tag_dark</item>
         <item name="galleryDetailHeaderTitleColor">?android:attr/textColorPrimary</item>
         <item name="galleryDetailHeaderBackgroundColor">?attr/contentColorThemePrimary</item>
         <item name="galleryDetailButtonBackgroundColor">
@@ -189,6 +191,7 @@
         <item name="guideTextColor">?android:attr/textColorSecondary</item>
         <item name="tagGroupBackgroundColor">@color/tag_group_background_black</item>
         <item name="tagBackgroundColor">@color/tag_background_black</item>
+        <item name="subscribedTagBackgroundColor">@color/subscribed_tag_black</item>
         <item name="galleryDetailHeaderTitleColor">?android:attr/textColorPrimary</item>
         <item name="galleryDetailHeaderBackgroundColor">@android:color/black</item>
         <item name="galleryDetailButtonBackgroundColor">

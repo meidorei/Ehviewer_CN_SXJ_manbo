@@ -31,6 +31,7 @@ import java.util.Collections;
 import java.util.regex.Pattern;
 
 public class GalleryInfo implements Parcelable {
+    private static final int PARCEL_POSTED_TIMESTAMP_MAGIC = 0x45565453; // EVTS
 
     /**
      * ISO 639-1
@@ -111,6 +112,8 @@ public class GalleryInfo implements Parcelable {
     public String thumb;
     public int category;
     public String posted;
+    /** Unix seconds. Zero means unavailable and must never advance a checkpoint. */
+    public long postedTimestamp;
     public String uploader;
     public float rating;
     public boolean rated;
@@ -155,7 +158,7 @@ public class GalleryInfo implements Parcelable {
                 spanGroupIndex + "," +
                 favoriteSlot + "," +
                 favoriteName + "," +
-                pages + "\n";
+                pages + "," + postedTimestamp + "\n";
     }
 
     public static GalleryInfo fromCSV(String csv) {
@@ -185,6 +188,7 @@ public class GalleryInfo implements Parcelable {
             gi.favoriteSlot = Integer.parseInt(values[17]);
             gi.favoriteName = values[18];
             gi.pages = Integer.parseInt(values[19].trim());
+            if (values.length > 20) gi.postedTimestamp = Long.parseLong(values[20].trim());
         } catch (NumberFormatException e) {
             return null;
         }
@@ -251,6 +255,8 @@ public class GalleryInfo implements Parcelable {
         dest.writeInt(this.favoriteSlot);
         dest.writeString(this.favoriteName);
         dest.writeList(this.tgList);
+        dest.writeInt(PARCEL_POSTED_TIMESTAMP_MAGIC);
+        dest.writeLong(this.postedTimestamp);
     }
 
     public GalleryInfo() {
@@ -277,6 +283,14 @@ public class GalleryInfo implements Parcelable {
         this.favoriteSlot = in.readInt();
         this.favoriteName = in.readString();
         this.tgList = in.readArrayList(String.class.getClassLoader());
+        if (in.dataAvail() >= 12) {
+            int position = in.dataPosition();
+            if (in.readInt() == PARCEL_POSTED_TIMESTAMP_MAGIC) {
+                this.postedTimestamp = in.readLong();
+            } else {
+                in.setDataPosition(position);
+            }
+        }
     }
 
     public static final Creator<GalleryInfo> CREATOR = new Creator<>() {
@@ -301,6 +315,7 @@ public class GalleryInfo implements Parcelable {
         i.thumb = thumb;
         i.category = category;
         i.posted = posted;
+        i.postedTimestamp = postedTimestamp;
         i.uploader = uploader;
         i.rating = rating;
         i.rated = rated;
@@ -333,6 +348,7 @@ public class GalleryInfo implements Parcelable {
         jsonObject.put("thumb", thumb);
         jsonObject.put("category", category);
         jsonObject.put("posted", posted);
+        jsonObject.put("postedTimestamp", postedTimestamp);
         jsonObject.put("uploader", uploader);
         jsonObject.put("rating", rating);
         jsonObject.put("rated", rated);
@@ -355,6 +371,7 @@ public class GalleryInfo implements Parcelable {
     public static GalleryInfo galleryInfoFromJson(JSONObject object) {
         GalleryInfo galleryInfo = new GalleryInfo();
         galleryInfo.posted = object.getString("posted");
+        galleryInfo.postedTimestamp = object.getLongValue("postedTimestamp");
         galleryInfo.category = object.getIntValue("category");
         galleryInfo.favoriteName = object.getString("favoriteName");
         galleryInfo.favoriteSlot = object.getIntValue("favoriteSlot");
