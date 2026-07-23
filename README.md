@@ -7,7 +7,7 @@ An E-Hentai Application for Android.
 
 
 ## 下载
-[- [GitHub](https://github.com/meidorei/Ehviewer_CN_SXJ_manbo/releases)
+[GitHub](https://github.com/meidorei/Ehviewer_CN_SXJ_manbo/releases)
 
 # 追更功能
 
