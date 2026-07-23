@@ -4,26 +4,6 @@
 
 
 An E-Hentai Application for Android.
-前往原作者仓库
-### [常见问题汇总](https://github.com/xiaojieonly/Ehviewer_CN_SXJ/blob/BiLi_PC_Gamer/feedauthor/EhviewerIssue.md)
-# Download
-
-点击前往下载：
-[//]: # (- [Appteka]&#40;https://appteka.store/app/acdr168648&#41;)
-- [百度云](https://pan.baidu.com/s/1rh-lvEc-QjiMtfPi6T1BKA) 提取码：7p6z
-- [夸克网盘](https://pan.quark.cn/s/0de32f69e12a) 提取码：SnVD
-- [蓝奏云](https://wwbfg.lanzouu.com/iWAFL3uefh8d)，电脑端可正常下载 提取码：3txx
-- [GitHub](https://github.com/xiaojieonly/Ehviewer_CN_SXJ/releases)
-- Torrent链接:magnet:?xt=urn:btih:ec1403341edaba853b0836d2d3c5976498572a3c&xt=urn:btmh:1220453fdf4272b27c81d88a4ddae25a64ca524a13e53f835430b4acacb2e7ae3bcb&dn=EhViewer-2.0.2.2.apk&xl=27747451
-
-
-点击前往赏饭：
-
-- [要饭嘛不寒掺](https://github.com/xiaojieonly/Ehviewer_CN_SXJ/blob/BiLi_PC_Gamer/feedauthor/support.md)
-
-唯一X账号：https://x.com/Sherloc21784244    
-Telegram群: https://telegram.me/+WyclP8pPlk-JfbwS   
-Telegram通知群: https://telegram.me/Ehviewer_xiaojieonly_channel    
 
 
 # 追更功能
@@ -66,6 +46,29 @@ JM 使用易变的内部接口。出现“JM服务暂时不可用”时，请先
 5. 如果仍然失败，请再次退出登录，确认 VPN 节点后重复以上步骤。
 
 `igneous` 可能会过期，过期后需要重新登录获取。身份 Cookie 属于账号敏感信息，请勿截图、公开或发送给他人。
+
+
+下面是原作者仓库
+### [常见问题汇总](https://github.com/xiaojieonly/Ehviewer_CN_SXJ/blob/BiLi_PC_Gamer/feedauthor/EhviewerIssue.md)
+# Download
+
+点击前往下载：
+[//]: # (- [Appteka]&#40;https://appteka.store/app/acdr168648&#41;)
+- [百度云](https://pan.baidu.com/s/1rh-lvEc-QjiMtfPi6T1BKA) 提取码：7p6z
+- [夸克网盘](https://pan.quark.cn/s/0de32f69e12a) 提取码：SnVD
+- [蓝奏云](https://wwbfg.lanzouu.com/iWAFL3uefh8d)，电脑端可正常下载 提取码：3txx
+- [GitHub](https://github.com/xiaojieonly/Ehviewer_CN_SXJ/releases)
+- Torrent链接:magnet:?xt=urn:btih:ec1403341edaba853b0836d2d3c5976498572a3c&xt=urn:btmh:1220453fdf4272b27c81d88a4ddae25a64ca524a13e53f835430b4acacb2e7ae3bcb&dn=EhViewer-2.0.2.2.apk&xl=27747451
+
+
+点击前往赏饭：
+
+- [要饭嘛不寒掺](https://github.com/xiaojieonly/Ehviewer_CN_SXJ/blob/BiLi_PC_Gamer/feedauthor/support.md)
+
+唯一X账号：https://x.com/Sherloc21784244    
+Telegram群: https://telegram.me/+WyclP8pPlk-JfbwS   
+Telegram通知群: https://telegram.me/Ehviewer_xiaojieonly_channel    
+
 
 # Changelog
 ## 2026/07/01
