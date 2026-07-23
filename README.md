@@ -48,7 +48,10 @@ JM 使用易变的内部接口。出现“JM服务暂时不可用”时，请先
 `igneous` 可能会过期，过期后需要重新登录获取。身份 Cookie 属于账号敏感信息，请勿截图、公开或发送给他人。
 
 
-下面是原作者仓库
+
+
+
+# 下面是原作者仓库
 ### [常见问题汇总](https://github.com/xiaojieonly/Ehviewer_CN_SXJ/blob/BiLi_PC_Gamer/feedauthor/EhviewerIssue.md)
 # Download
 
