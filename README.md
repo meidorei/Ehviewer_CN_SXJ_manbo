@@ -1,17 +1,14 @@
-# EhViewer
-## 本APP有且仅在Github更新，所有自诩“官网”的均属虚假信息，请注意甄别
-
-### [常见问题汇总](https://github.com/xiaojieonly/Ehviewer_CN_SXJ/blob/BiLi_PC_Gamer/feedauthor/EhviewerIssue.md)
 ![Icon](fastlane/metadata/android/en-US/images/icon.png)
 
 这是一个 E-Hentai Android 平台的浏览器。
 
-An E-Hentai Application for Android.
 
+An E-Hentai Application for Android.
+前往原作者仓库
+### [常见问题汇总](https://github.com/xiaojieonly/Ehviewer_CN_SXJ/blob/BiLi_PC_Gamer/feedauthor/EhviewerIssue.md)
 # Download
 
 点击前往下载：
-
 [//]: # (- [Appteka]&#40;https://appteka.store/app/acdr168648&#41;)
 - [百度云](https://pan.baidu.com/s/1rh-lvEc-QjiMtfPi6T1BKA) 提取码：7p6z
 - [夸克网盘](https://pan.quark.cn/s/0de32f69e12a) 提取码：SnVD
