@@ -15,7 +15,7 @@
   -->
 
 <resources>
-    <color name="subscribed_tag_light">#FFFFE0</color>
+    <color name="subscribed_tag_light">#FFE65100</color>
     <color name="subscribed_tag_dark">#665B4700</color>
     <color name="subscribed_tag_black">#80543D00</color>
 
