@@ -84,6 +84,7 @@ import com.hippo.ehviewer.ui.scene.gallery.list.FavoritesScene;
 import com.hippo.ehviewer.ui.scene.GalleryCommentsScene;
 import com.hippo.ehviewer.ui.scene.gallery.detail.GalleryDetailScene;
 import com.hippo.ehviewer.ui.scene.GalleryInfoScene;
+import com.hippo.ehviewer.ui.scene.JmQueryScene;
 import com.hippo.ehviewer.ui.scene.gallery.list.GalleryListScene;
 import com.hippo.ehviewer.ui.scene.GalleryPreviewsScene;
 import com.hippo.ehviewer.ui.scene.gallery.list.SubscriptionsScene;
@@ -948,6 +949,9 @@ public final class MainActivity extends StageActivity
             case R.id.nav_settings:
                 Intent intent = new Intent(this, SettingsActivity.class);
                 startActivityForResult(intent, REQUEST_CODE_SETTINGS);
+                break;
+            case R.id.nav_jm_query:
+                startScene(new Announcer(JmQueryScene.class));
                 break;
             default:
                 throw new IllegalStateException("Unexpected value: " + item.getItemId());

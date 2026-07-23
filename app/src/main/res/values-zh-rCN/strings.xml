@@ -995,4 +995,27 @@
     <string name="imported_archive_category">本地导入</string>
 
     <string name="auto_append_chinese">自动拼接中文</string>
+    <string name="jm_query_title">JM号查询</string>
+    <string name="jm_query_hint">输入JM号或漫画链接</string>
+    <string name="jm_query_action">查询</string>
+    <string name="jm_cover">JM漫画封面</string>
+    <string name="jm_copy_title">复制名称</string>
+    <string name="jm_open_web">浏览器打开</string>
+    <string name="jm_invalid_number">请输入正确的JM号或漫画链接</string>
+    <string name="jm_not_found">该JM号不存在或已被删除</string>
+    <string name="jm_service_unavailable">JM服务暂时不可用，请检查网络后重试</string>
+    <string name="jm_web_unavailable">无法获取当前JM网页地址</string>
+    <string name="jm_title_copied">漫画名称已复制</string>
+    <string name="jm_number_format">JM%1$s</string>
+    <string name="jm_authors">作者</string>
+    <string name="jm_tags">标签</string>
+    <string name="jm_works">作品</string>
+    <string name="jm_actors">角色</string>
+    <string name="jm_page_count">页数</string>
+    <string name="jm_views">浏览</string>
+    <string name="jm_likes">点赞</string>
+    <string name="jm_comments">评论</string>
+    <string name="jm_data_source">数据</string>
+    <string name="jm_partial_result">网页降级查询的基础结果</string>
+    <string name="jm_chapters_format">章节\n%1$s</string>
 </resources>
