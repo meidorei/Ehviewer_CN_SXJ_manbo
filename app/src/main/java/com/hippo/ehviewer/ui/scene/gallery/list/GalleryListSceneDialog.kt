@@ -4,6 +4,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.DialogInterface
+import android.view.LayoutInflater
+import android.view.View
 import android.widget.Toast
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AlertDialog
@@ -46,37 +48,38 @@ class GalleryListSceneDialog(val baseScene: BaseScene) {
         } else {
             tagName
         }
-        val builder = AlertDialog.Builder(
-            context!!
-        )
+        val content = LayoutInflater.from(context).inflate(R.layout.dialog_tag_actions, null)
+        val builder = AlertDialog.Builder(context!!)
             .setTitle(title)
-            .setItems(
-                R.array.tag_menu_entries
-            ) { _: DialogInterface?, which: Int ->
-                when (which) {
-                    0 -> UrlOpener.openUrl(
-                        context, EhUrl.getTagDefinitionUrl(temp), false
-                    )
-
-                    1 -> showFilterTagDialog()
-                }
+            .setView(content)
+            .setNegativeButton(R.string.copy_tag) { _: DialogInterface?, _: Int ->
+                copyTag(tagName)
             }
-        if (!Settings.isLogin()) {
-            builder.setNegativeButton(
-                R.string.copy_tag
-            ) { _: DialogInterface?, _: Int -> copyTag(tagName) }
-                .show()
+        if (Settings.isLogin()) {
+            builder.setPositiveButton(R.string.subscription_watched) {
+                    _: DialogInterface?, _: Int -> requestTag(tagName, true)
+            }
         } else {
-            builder.setNeutralButton(
-                R.string.copy_tag
-            ) { _: DialogInterface?, _: Int -> copyTag(tagName) }
-                .setNegativeButton(
-                    R.string.subscription_watched
-                ) { _: DialogInterface?, _: Int -> requestTag(tagName, true) }
-                .setPositiveButton(
-                    R.string.subscription_hidden
-                ) { _: DialogInterface?, _: Int -> requestTag(tagName, false) }
-                .show()
+            content.findViewById<View>(R.id.tag_action_exclude).visibility = View.GONE
+        }
+        val dialog = builder.create()
+        content.findViewById<View>(R.id.tag_action_definition).setOnClickListener {
+            dialog.dismiss()
+            UrlOpener.openUrl(context, EhUrl.getTagDefinitionUrl(temp), false)
+        }
+        content.findViewById<View>(R.id.tag_action_filter).setOnClickListener {
+            dialog.dismiss()
+            showFilterTagDialog()
+        }
+        content.findViewById<View>(R.id.tag_action_exclude).setOnClickListener {
+            dialog.dismiss()
+            requestTag(tagName, false)
+        }
+        dialog.show()
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.apply {
+            textSize = 17f
+            minWidth = (96 * resources.displayMetrics.density).toInt()
+            minHeight = (48 * resources.displayMetrics.density).toInt()
         }
     }
 
@@ -152,6 +155,13 @@ class GalleryListSceneDialog(val baseScene: BaseScene) {
         }
 
         override fun onSuccess(result: UserTagList?) {
+            if (result == null) {
+                Toast.makeText(context, R.string.subscription_tag_update_failed, Toast.LENGTH_SHORT)
+                    .show()
+                return
+            }
+            EhApplication.saveUserTagList(context!!, result)
+            com.hippo.ehviewer.subscription.SubscriptionSnapshot.replace(result)
             baseScene.setTagList(result)
             val state =
                 if (tagState) context!!.getString(R.string.subscription_watched) else context!!.getString(

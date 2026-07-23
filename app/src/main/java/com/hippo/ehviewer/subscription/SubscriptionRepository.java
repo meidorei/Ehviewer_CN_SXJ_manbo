@@ -138,16 +138,45 @@ public final class SubscriptionRepository {
         }
     }
 
-    /** Atomically advances the aggregate boundary and replaces the complete count snapshot. */
+    /** Atomically advances the aggregate sync boundary and accumulates exact unread deltas. */
     public void commitAggregateUpdate(CheckpointKey key, FeedBoundary boundary,
-                                      Map<String, TagUpdateState> states) {
+                                      Map<String, TagUpdateState> deltas,
+                                      boolean baselineOnly) {
         if (boundary == null || boundary.time == 0) return;
         Database db = EhDB.getDatabase();
         db.beginTransaction();
         try {
             FeedCheckpoint old = readCheckpoint(key);
             upsertCheckpoint(db, key, old.current, boundary);
-            replaceTagCounts(key.accountKey, key.querySignature, states);
+            Map<String, TagUpdateState> existing = readTagCounts(key.accountKey, key.querySignature);
+            replaceTagCounts(key.accountKey, key.querySignature,
+                    SubscriptionUpdateCalculator.mergeUnread(existing, deltas, baselineOnly));
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+    }
+
+    /**
+     * Advances a local seen boundary and clears only the unread count that existed when the
+     * feed was entered. A newer concurrent sync has a later CHECKED_AT and is preserved.
+     */
+    public void commitSeenBoundary(CheckpointKey key, FeedBoundary boundary,
+                                   String tagName, long enteredAt) {
+        if (boundary == null || boundary.time == 0) return;
+        Database db = EhDB.getDatabase();
+        db.beginTransaction();
+        try {
+            FeedCheckpoint old = readCheckpoint(key);
+            upsertCheckpoint(db, key, old.current, boundary);
+            String normalized = normalizeTagName(tagName);
+            if (!normalized.isEmpty()) {
+                db.execSQL("UPDATE SUBSCRIPTION_TAG_UPDATE_STATE " +
+                                "SET COUNT=0,COUNT_STATE=?,CHECKED_AT=? " +
+                                "WHERE ACCOUNT_KEY=? AND TAG_NAME=? AND QUERY_SIGNATURE=? AND CHECKED_AT<=?",
+                        new Object[]{TagUpdateState.State.EXACT.name(), System.currentTimeMillis(),
+                                key.accountKey, normalized, key.querySignature, enteredAt});
+            }
             db.setTransactionSuccessful();
         } finally {
             db.endTransaction();

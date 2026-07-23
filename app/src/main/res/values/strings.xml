@@ -347,11 +347,15 @@
     <string name="no_more_previews">No more previews</string>
     <string name="more_previews">More previews</string>
     <string name="refresh">Refresh</string>
-    <string name="last_update_marker">Last update reached here</string>
+    <string name="last_update_marker">Last seen here</string>
     <string name="subscription_refresh_cooldown">Follow update is cooling down. Please try again shortly.</string>
     <string name="subscription_refresh_last">Last %1$s</string>
     <string name="subscription_refresh_failed">Failed %1$s</string>
     <string name="subscription_refresh_cancelled">Cancelled %1$s</string>
+    <string name="subscription_refresh_syncing_tags">Syncing tags</string>
+    <string name="subscription_refresh_scanned_pages">Scanned %1$d pages</string>
+    <string name="subscription_refresh_saving">Saving</string>
+    <string name="subscription_tag_update_failed">Unable to update the tag</string>
     <string name="open_in_other_app">Open with other app</string>
     <string name="rate_successfully">Rate successfully</string>
     <string name="rate_failed">Rate failed</string>
@@ -1080,4 +1084,27 @@
     <!-- TagSelectActivity -->
     <string name="tag_search_entrance">Tag Selector</string>
     <string name="auto_append_chinese">Automatically filter Chinese</string>
+    <string name="jm_query_title">JM number lookup</string>
+    <string name="jm_query_hint">JM number or album link</string>
+    <string name="jm_query_action">Look up</string>
+    <string name="jm_cover">JM album cover</string>
+    <string name="jm_copy_title">Copy title</string>
+    <string name="jm_open_web">Open in browser</string>
+    <string name="jm_invalid_number">Enter a valid JM number or album link</string>
+    <string name="jm_not_found">This JM number does not exist or has been removed</string>
+    <string name="jm_service_unavailable">JM service is temporarily unavailable. Check the network and try again.</string>
+    <string name="jm_web_unavailable">Unable to discover the current JM website</string>
+    <string name="jm_title_copied">Title copied</string>
+    <string name="jm_number_format">JM%1$s</string>
+    <string name="jm_authors">Authors</string>
+    <string name="jm_tags">Tags</string>
+    <string name="jm_works">Works</string>
+    <string name="jm_actors">Characters</string>
+    <string name="jm_page_count">Pages</string>
+    <string name="jm_views">Views</string>
+    <string name="jm_likes">Likes</string>
+    <string name="jm_comments">Comments</string>
+    <string name="jm_data_source">Data</string>
+    <string name="jm_partial_result">Basic result from the web fallback</string>
+    <string name="jm_chapters_format">Chapters\n%1$s</string>
 </resources>

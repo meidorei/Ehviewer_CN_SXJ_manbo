@@ -59,6 +59,7 @@ import com.hippo.ehviewer.client.parser.GalleryTokenApiParser;
 import com.hippo.ehviewer.client.parser.MyTagLitParser;
 import com.hippo.ehviewer.subscription.FeedBoundary;
 import com.hippo.ehviewer.subscription.SubscriptionScanResult;
+import com.hippo.ehviewer.subscription.SubscriptionScanProgress;
 import com.hippo.ehviewer.client.parser.ProfileParser;
 import com.hippo.ehviewer.client.parser.RateGalleryParser;
 import com.hippo.ehviewer.client.parser.SignInParser;
@@ -73,6 +74,7 @@ import com.hippo.lib.yorozuya.AssertUtils;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -323,14 +325,17 @@ public class EhEngine {
                                                             long boundaryTime,
                                                             Set<Long> boundaryGids) throws Throwable {
         SubscriptionScanResult scan = new SubscriptionScanResult();
-        if (task != null) task.reportProgress(0, 100);
+        if (task != null) task.reportProgress(SubscriptionScanProgress.syncingTags());
         scan.tags = getWatchedList(task, client, tagUrl);
         if (scan.tags == null) throw new ParseException("Unable to load subscription tags", "");
-        if (task != null) task.reportProgress(10, 100);
         FeedBoundary boundary = new FeedBoundary(boundaryTime, boundaryGids);
         Map<Long, GalleryInfo> unique = new LinkedHashMap<>();
+        Set<String> visitedUrls = new HashSet<>();
         String url = watchedUrl;
-        for (int page = 0; page < 4 && url != null && !url.isEmpty(); page++) {
+        while (url != null && !url.isEmpty()) {
+            if (!visitedUrls.add(url)) {
+                throw new ParseException("Subscription pagination loop", url);
+            }
             GalleryListParser.Result result = getGalleryList(task, client, url,
                     com.hippo.ehviewer.client.data.ListUrlBuilder.MODE_SUBSCRIPTION);
             if (!result.galleryInfoList.isEmpty()
@@ -339,7 +344,9 @@ public class EhEngine {
                 fillGalleryListByApi(task, client, result.galleryInfoList, url);
             }
             scan.pagesScanned++;
-            if (task != null) task.reportProgress(10 + scan.pagesScanned * 20, 100);
+            if (task != null) {
+                task.reportProgress(SubscriptionScanProgress.scanningPages(scan.pagesScanned));
+            }
             for (GalleryInfo gallery : result.galleryInfoList) {
                 unique.put(gallery.gid, gallery);
                 if (!boundary.isEmpty() && boundary.isFirstOld(gallery.postedTimestamp, gallery.gid)) {
@@ -353,8 +360,6 @@ public class EhEngine {
             url = next == null ? null : next.toString();
         }
         scan.galleries.addAll(unique.values());
-        scan.reachedPageLimit = scan.pagesScanned == 4 && !scan.reachedBoundary;
-        if (task != null) task.reportProgress(95, 100);
         return scan;
     }
 

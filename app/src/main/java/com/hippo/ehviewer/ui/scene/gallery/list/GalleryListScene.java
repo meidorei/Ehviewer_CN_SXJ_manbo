@@ -108,10 +108,12 @@ import com.hippo.ehviewer.subscription.CheckpointKey;
 import com.hippo.ehviewer.subscription.FeedCheckpoint;
 import com.hippo.ehviewer.subscription.FeedBoundary;
 import com.hippo.ehviewer.subscription.FeedBoundaryDecoration;
+import com.hippo.ehviewer.subscription.FeedCheckpointKeys;
 import com.hippo.ehviewer.subscription.FeedSourceContext;
 import com.hippo.ehviewer.subscription.QuerySignatureFactory;
 import com.hippo.ehviewer.subscription.SearchQueryPolicy;
 import com.hippo.ehviewer.subscription.SubscriptionRepository;
+import com.hippo.ehviewer.subscription.SubscriptionScanProgress;
 import com.hippo.ehviewer.subscription.SubscriptionScanResult;
 import com.hippo.ehviewer.subscription.SubscriptionRefreshStatus;
 import com.hippo.ehviewer.subscription.SubscriptionSnapshot;
@@ -172,6 +174,9 @@ public final class GalleryListScene extends BaseScene
     private FeedSourceContext mFeedSourceContext;
     private FeedBoundary mVisibleFeedBoundary = FeedBoundary.EMPTY;
     private FeedBoundaryDecoration mFeedBoundaryDecoration;
+    private boolean mSeenCommittedForContext;
+    private boolean mRecordSeenOnLoad = true;
+    private long mFeedEnteredAt;
 
     public final static int REQUEST_CODE_SELECT_IMAGE = 0;
 
@@ -190,6 +195,9 @@ public final class GalleryListScene extends BaseScene
     private static final String KEY_FEED_SIGNATURE = "feed_signature";
     private static final String KEY_FEED_TIME = "feed_time";
     private static final String KEY_FEED_GIDS = "feed_gids";
+    private static final String KEY_SEEN_COMMITTED = "seen_committed";
+    private static final String KEY_FEED_ENTERED_AT = "feed_entered_at";
+    private static final String KEY_RECORD_SEEN = "record_seen";
 
     final static int STATE_NORMAL = 0;
     final static int STATE_SIMPLE_SEARCH = 1;
@@ -365,6 +373,9 @@ public final class GalleryListScene extends BaseScene
                 Settings.getAutoAppendChinese());
         mFeedSourceContext = new FeedSourceContext(type, sourceKey,
                 QuerySignatureFactory.create(query.effectiveQuery, query.chineseActuallyApplied));
+        mFeedEnteredAt = System.currentTimeMillis();
+        mSeenCommittedForContext = false;
+        mRecordSeenOnLoad = true;
         mVisibleFeedBoundary = FeedBoundary.EMPTY;
         clearVisibleFeedMarker();
         loadFeedBoundary();
@@ -377,6 +388,9 @@ public final class GalleryListScene extends BaseScene
         mFeedSourceContext = new FeedSourceContext(FeedSourceContext.Type.QUICK_SEARCH,
                 Long.toString(search.getId()), QuerySignatureFactory.create(
                 query.effectiveQuery, query.chineseActuallyApplied));
+        mFeedEnteredAt = System.currentTimeMillis();
+        mSeenCommittedForContext = false;
+        mRecordSeenOnLoad = true;
         mVisibleFeedBoundary = FeedBoundary.EMPTY;
         clearVisibleFeedMarker();
         loadFeedBoundary();
@@ -387,12 +401,14 @@ public final class GalleryListScene extends BaseScene
         if (mRecyclerView != null) mRecyclerView.invalidateItemDecorations();
     }
 
-    private CheckpointKey checkpointKey(FeedSourceContext context) {
+    private CheckpointKey seenCheckpointKey(FeedSourceContext context) {
         SubscriptionRepository repository = SubscriptionRepository.getInstance();
-        String type = context.type == FeedSourceContext.Type.SUBSCRIPTION_TAG
-                ? FeedSourceContext.Type.SUBSCRIPTION_AGGREGATE.name() : context.type.name();
-        String source = context.type == FeedSourceContext.Type.SUBSCRIPTION_TAG ? "watched" : context.sourceKey;
-        return new CheckpointKey(repository.getAccountKey(), type, source, context.querySignature);
+        return FeedCheckpointKeys.seen(repository.getAccountKey(), context);
+    }
+
+    private CheckpointKey syncCheckpointKey(FeedSourceContext context) {
+        SubscriptionRepository repository = SubscriptionRepository.getInstance();
+        return FeedCheckpointKeys.subscriptionSync(repository.getAccountKey(), context);
     }
 
     private void loadFeedBoundary() {
@@ -400,9 +416,8 @@ public final class GalleryListScene extends BaseScene
         if (context == null || !context.showsMarker()) return;
         SubscriptionRepository repository = SubscriptionRepository.getInstance();
         repository.execute(() -> {
-            FeedCheckpoint checkpoint = repository.readCheckpoint(checkpointKey(context));
-            FeedBoundary boundary = context.type == FeedSourceContext.Type.SUBSCRIPTION_TAG
-                    ? checkpoint.previous : checkpoint.current;
+            FeedCheckpoint checkpoint = repository.readCheckpoint(seenCheckpointKey(context));
+            FeedBoundary boundary = checkpoint.current;
             if (mFeedSourceContext != context) return;
             mVisibleFeedBoundary = boundary;
             if (mRecyclerView != null) mRecyclerView.post(() -> {
@@ -527,6 +542,10 @@ public final class GalleryListScene extends BaseScene
                     savedInstanceState.getString(KEY_FEED_SIGNATURE, ""));
             mVisibleFeedBoundary = new FeedBoundary(savedInstanceState.getLong(KEY_FEED_TIME),
                     SubscriptionRepository.parseGids(savedInstanceState.getString(KEY_FEED_GIDS, "")));
+            mSeenCommittedForContext = savedInstanceState.getBoolean(KEY_SEEN_COMMITTED, false);
+            mFeedEnteredAt = savedInstanceState.getLong(KEY_FEED_ENTERED_AT,
+                    System.currentTimeMillis());
+            mRecordSeenOnLoad = savedInstanceState.getBoolean(KEY_RECORD_SEEN, true);
         }
     }
 
@@ -550,6 +569,9 @@ public final class GalleryListScene extends BaseScene
             outState.putLong(KEY_FEED_TIME, mVisibleFeedBoundary.time);
             outState.putString(KEY_FEED_GIDS,
                     SubscriptionRepository.serializeGids(mVisibleFeedBoundary.gids));
+            outState.putBoolean(KEY_SEEN_COMMITTED, mSeenCommittedForContext);
+            outState.putLong(KEY_FEED_ENTERED_AT, mFeedEnteredAt);
+            outState.putBoolean(KEY_RECORD_SEEN, mRecordSeenOnLoad);
         }
     }
 
@@ -1235,11 +1257,13 @@ public final class GalleryListScene extends BaseScene
     public void onSubscriptionRefresh() {
         if (mUrlBuilder == null || mHelper == null) return;
         setFeedSource(FeedSourceContext.Type.SUBSCRIPTION_AGGREGATE, "watched", "");
+        // A manual sync displays refreshed data but must never advance a seen boundary.
+        mRecordSeenOnLoad = false;
         closeDrawer(Gravity.RIGHT);
         SubscriptionRepository repository = SubscriptionRepository.getInstance();
         FeedSourceContext context = mFeedSourceContext;
         repository.execute(() -> {
-            CheckpointKey key = checkpointKey(context);
+            CheckpointKey key = syncCheckpointKey(context);
             FeedCheckpoint checkpoint = repository.readCheckpoint(key);
             if (checkpoint.updatedAt > 0
                     && System.currentTimeMillis() - checkpoint.updatedAt < 60_000L) {
@@ -1255,14 +1279,16 @@ public final class GalleryListScene extends BaseScene
             Context callbackContext = getEHContext();
             if (activity == null || callbackContext == null || mFeedSourceContext != context) return;
             activity.runOnUiThread(() -> {
-                if (mSubscriptionDraw != null) mSubscriptionDraw.showRefreshProgress(0, 100);
+                if (mSubscriptionDraw != null) {
+                    mSubscriptionDraw.showRefreshProgress(SubscriptionScanProgress.syncingTags());
+                }
                 EhRequest request = new EhRequest().setMethod(EhClient.METHOD_SCAN_SUBSCRIPTIONS)
                         .setArgs(watchedUrl, EhUrl.getMyTag(), checkpoint.current.time,
                                 SubscriptionRepository.serializeGids(checkpoint.current.gids))
                         .setCallback(new EhClient.ProgressCallback<SubscriptionScanResult>() {
-                            @Override public void onProgress(int progress, int max) {
+                            @Override public void onProgress(SubscriptionScanProgress progress) {
                                 if (mSubscriptionDraw != null) {
-                                    mSubscriptionDraw.showRefreshProgress(progress, max);
+                                    mSubscriptionDraw.showRefreshProgress(progress);
                                 }
                             }
 
@@ -1303,7 +1329,7 @@ public final class GalleryListScene extends BaseScene
                 if (tag.watched && !tag.hidden) tags.add(SubscriptionRepository.normalizeTagName(tag.tagName));
             }
             SubscriptionUpdateCalculator.Outcome outcome = SubscriptionUpdateCalculator.calculate(
-                    checkpoint.current, scan.galleries, tags, scan.reachedPageLimit);
+                    checkpoint.current, scan.galleries, tags);
             if (!outcome.complete) {
                 MainActivity failedActivity = getActivity2();
                 if (failedActivity != null) failedActivity.runOnUiThread(() -> {
@@ -1314,14 +1340,18 @@ public final class GalleryListScene extends BaseScene
                 return;
             }
             if (mFeedSourceContext != context) return;
-            repository.commitAggregateUpdate(key, outcome.newBoundary, outcome.states);
+            MainActivity savingActivity = getActivity2();
+            if (savingActivity != null) savingActivity.runOnUiThread(() -> {
+                if (mSubscriptionDraw != null) mSubscriptionDraw.showRefreshSaving();
+            });
+            repository.commitAggregateUpdate(key, outcome.newBoundary, outcome.states,
+                    outcome.baselineOnly);
             MainActivity activity = getActivity2();
             if (activity != null) activity.runOnUiThread(() -> {
                 if (mUrlBuilder == null || mHelper == null || mFeedSourceContext != context) return;
                 if (mSubscriptionDraw != null) mSubscriptionDraw.showRefreshResult(
                         SubscriptionRefreshStatus.Result.SUCCESS, System.currentTimeMillis());
-                mVisibleFeedBoundary = checkpoint.current;
-                if (mFeedBoundaryDecoration != null) mFeedBoundaryDecoration.setBoundary(mVisibleFeedBoundary);
+                if (mSubscriptionDraw != null) mSubscriptionDraw.refreshFollowCounts();
                 mUrlBuilder.setMode(ListUrlBuilder.MODE_SUBSCRIPTION);
                 mUrlBuilder.setKeyword(null);
                 mUrlBuilder.setPageIndex(0);
@@ -2206,9 +2236,9 @@ public final class GalleryListScene extends BaseScene
 
     private void handleSuccessfulFeed(GalleryListParser.Result result) {
         FeedSourceContext context = mFeedSourceContext;
-        if (context == null || !context.persistsCheckpoint() || mUrlBuilder == null
+        if (context == null || !context.showsMarker() || mUrlBuilder == null
                 || mUrlBuilder.getPageIndex() != 0 || result.galleryInfoList.isEmpty()
-                || context.type == FeedSourceContext.Type.SUBSCRIPTION_AGGREGATE) return;
+                || mSeenCommittedForContext || !mRecordSeenOnLoad) return;
         long newest = 0;
         long previousTime = Long.MAX_VALUE;
         Set<Long> gids = new LinkedHashSet<>();
@@ -2226,9 +2256,19 @@ public final class GalleryListScene extends BaseScene
         }
         if (newest == 0 || mFeedSourceContext != context) return;
         FeedBoundary next = new FeedBoundary(newest, gids);
+        CheckpointKey seenKey = seenCheckpointKey(context);
+        String seenTag = context.type == FeedSourceContext.Type.SUBSCRIPTION_TAG
+                ? context.sourceKey : "";
+        long enteredAt = mFeedEnteredAt;
+        mSeenCommittedForContext = true;
         SubscriptionRepository.getInstance().execute(() -> {
-            if (mFeedSourceContext == context) {
-                SubscriptionRepository.getInstance().advanceCheckpoint(checkpointKey(context), next);
+            SubscriptionRepository.getInstance().commitSeenBoundary(
+                    seenKey, next, seenTag, enteredAt);
+            MainActivity activity = getActivity2();
+            if (activity != null) {
+                activity.runOnUiThread(() -> {
+                    if (mSubscriptionDraw != null) mSubscriptionDraw.refreshFollowCounts();
+                });
             }
         });
     }

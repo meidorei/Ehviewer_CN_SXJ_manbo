@@ -1683,6 +1683,11 @@ public class GalleryDetailScene extends BaseScene implements View.OnClickListene
     @Override
     public void setTagList(UserTagList result) {
         super.setTagList(result);
+        if (result == null) return;
+        Context context = getEHContext();
+        if (context != null) EhApplication.saveUserTagList(context, result);
+        SubscriptionSnapshot.replace(result);
+        if (mGalleryDetail != null) bindTags(mGalleryDetail.tags);
     }
 
     @Override

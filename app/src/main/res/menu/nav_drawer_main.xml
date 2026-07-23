@@ -82,6 +82,11 @@
             android:checkable="true"
             android:icon="@drawable/ic_baseline_filter_24"
             android:title="@string/auto_append_chinese" />
+        <item
+            android:id="@+id/nav_jm_query"
+            android:checkable="false"
+            android:icon="@drawable/ic_jm_search_24"
+            android:title="@string/jm_query_title" />
     </group>
 
 </menu>

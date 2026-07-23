@@ -32,4 +32,18 @@ public class SubscriptionCoreTest {
         assertEquals(QuerySignatureFactory.create("foo", true),
                 QuerySignatureFactory.create("foo", true));
     }
+
+    @Test public void syncAggregateAndPerTagSeenCheckpointsNeverCollide() {
+        FeedSourceContext aggregate = new FeedSourceContext(
+                FeedSourceContext.Type.SUBSCRIPTION_AGGREGATE, "watched", "q");
+        FeedSourceContext tag = new FeedSourceContext(
+                FeedSourceContext.Type.SUBSCRIPTION_TAG, " Artist:A ", "q");
+        CheckpointKey sync = FeedCheckpointKeys.subscriptionSync("account", aggregate);
+        CheckpointKey aggregateSeen = FeedCheckpointKeys.seen("account", aggregate);
+        CheckpointKey tagSeen = FeedCheckpointKeys.seen("account", tag);
+        assertNotEquals(sync.sourceType, aggregateSeen.sourceType);
+        assertNotEquals(sync.sourceType, tagSeen.sourceType);
+        assertNotEquals(aggregateSeen.sourceType, tagSeen.sourceType);
+        assertEquals("artist:a", tagSeen.sourceKey);
+    }
 }

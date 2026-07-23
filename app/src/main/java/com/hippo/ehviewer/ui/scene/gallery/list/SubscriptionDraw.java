@@ -34,6 +34,7 @@ import com.hippo.ehviewer.subscription.QuerySignatureFactory;
 import com.hippo.ehviewer.subscription.SearchQueryPolicy;
 import com.hippo.ehviewer.subscription.SubscriptionRepository;
 import com.hippo.ehviewer.subscription.SubscriptionRefreshStatus;
+import com.hippo.ehviewer.subscription.SubscriptionScanProgress;
 import com.hippo.ehviewer.subscription.SubscriptionSnapshot;
 import com.hippo.ehviewer.subscription.TagUpdateState;
 import com.hippo.scene.Announcer;
@@ -151,10 +152,21 @@ public class SubscriptionDraw {
         return subscriptionView;
     }
 
-    public void showRefreshProgress(int progress, int max) {
+    public void showRefreshProgress(SubscriptionScanProgress progress) {
         if (refreshStatusView == null) return;
         refreshStatusView.setVisibility(View.VISIBLE);
-        refreshStatusView.setText(progress + "/" + max);
+        if (progress.stage == SubscriptionScanProgress.Stage.SYNCING_TAGS) {
+            refreshStatusView.setText(R.string.subscription_refresh_syncing_tags);
+        } else {
+            refreshStatusView.setText(context.getString(
+                    R.string.subscription_refresh_scanned_pages, progress.pagesScanned));
+        }
+    }
+
+    public void showRefreshSaving() {
+        if (refreshStatusView == null) return;
+        refreshStatusView.setVisibility(View.VISIBLE);
+        refreshStatusView.setText(R.string.subscription_refresh_saving);
     }
 
     public void showRefreshResult(SubscriptionRefreshStatus.Result result, long time) {
@@ -257,6 +269,10 @@ public class SubscriptionDraw {
                 if (adapter != null) adapter.notifyDataSetChanged();
             });
         });
+    }
+
+    public void refreshFollowCounts() {
+        if (userTagList != null) loadFollowCounts();
     }
 
     private void addNewTag() {
