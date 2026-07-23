@@ -347,11 +347,15 @@
     <string name="no_more_previews">No more previews</string>
     <string name="more_previews">More previews</string>
     <string name="refresh">Refresh</string>
-    <string name="last_update_marker">Last update reached here</string>
+    <string name="last_update_marker">Last seen here</string>
     <string name="subscription_refresh_cooldown">Follow update is cooling down. Please try again shortly.</string>
     <string name="subscription_refresh_last">Last %1$s</string>
     <string name="subscription_refresh_failed">Failed %1$s</string>
     <string name="subscription_refresh_cancelled">Cancelled %1$s</string>
+    <string name="subscription_refresh_syncing_tags">Syncing tags</string>
+    <string name="subscription_refresh_scanned_pages">Scanned %1$d pages</string>
+    <string name="subscription_refresh_saving">Saving</string>
+    <string name="subscription_tag_update_failed">Unable to update the tag</string>
     <string name="open_in_other_app">Open with other app</string>
     <string name="rate_successfully">Rate successfully</string>
     <string name="rate_failed">Rate failed</string>

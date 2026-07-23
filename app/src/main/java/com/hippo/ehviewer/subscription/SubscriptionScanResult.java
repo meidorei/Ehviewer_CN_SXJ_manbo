@@ -11,5 +11,4 @@ public final class SubscriptionScanResult {
     public final List<GalleryInfo> galleries = new ArrayList<>();
     public int pagesScanned;
     public boolean reachedBoundary;
-    public boolean reachedPageLimit;
 }

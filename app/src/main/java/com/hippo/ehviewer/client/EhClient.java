@@ -27,6 +27,7 @@ import com.hippo.ehviewer.client.data.userTag.TagPushParam;
 import com.hippo.ehviewer.client.data.userTag.UserTag;
 import com.hippo.ehviewer.client.exception.CancelledException;
 import com.hippo.ehviewer.subscription.SubscriptionRepository;
+import com.hippo.ehviewer.subscription.SubscriptionScanProgress;
 import com.hippo.util.ExceptionUtils;
 import com.hippo.util.IoThreadPoolExecutor;
 import com.hippo.lib.yorozuya.SimpleHandler;
@@ -123,13 +124,13 @@ public class EhClient {
         }
 
         /** Posts engine progress back to callbacks interested in it. */
-        public void reportProgress(int progress, int max) {
+        public void reportProgress(SubscriptionScanProgress progress) {
             Callback callback = mCallback;
             if (callback instanceof ProgressCallback) {
                 SimpleHandler.getInstance().post(() -> {
                     Callback current = mCallback;
                     if (current == callback && current instanceof ProgressCallback) {
-                        ((ProgressCallback) current).onProgress(progress, max);
+                        ((ProgressCallback) current).onProgress(progress);
                     }
                 });
             }
@@ -268,6 +269,6 @@ public class EhClient {
     }
 
     public interface ProgressCallback<E> extends Callback<E> {
-        void onProgress(int progress, int max);
+        void onProgress(SubscriptionScanProgress progress);
     }
 }

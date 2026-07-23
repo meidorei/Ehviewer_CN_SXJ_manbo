@@ -10,7 +10,9 @@ import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 
 public class SubscriptionUpdateCalculatorTest {
     private static GalleryInfo gallery(long gid, long time, String... tags) {
@@ -24,7 +26,7 @@ public class SubscriptionUpdateCalculatorTest {
     @Test public void firstRunCreatesZeroBaseline() {
         SubscriptionUpdateCalculator.Outcome result = SubscriptionUpdateCalculator.calculate(
                 FeedBoundary.EMPTY, Arrays.asList(gallery(2, 20, "artist:a"), gallery(1, 19, "artist:a")),
-                Collections.singleton("artist:a"), false);
+                Collections.singleton("artist:a"));
         assertTrue(result.complete);
         assertTrue(result.baselineOnly);
         assertEquals("0", result.states.get("artist:a").displayCount());
@@ -35,7 +37,7 @@ public class SubscriptionUpdateCalculatorTest {
         SubscriptionUpdateCalculator.Outcome result = SubscriptionUpdateCalculator.calculate(old,
                 Arrays.asList(gallery(3, 11, "artist:a", "group:b"),
                         gallery(2, 10, "artist:a"), gallery(1, 10, "artist:a")),
-                new HashSet<>(Arrays.asList("artist:a", "group:b")), false);
+                new HashSet<>(Arrays.asList("artist:a", "group:b")));
         assertTrue(result.complete);
         assertEquals(2, result.states.get("artist:a").count);
         assertEquals(1, result.states.get("group:b").count);
@@ -45,7 +47,36 @@ public class SubscriptionUpdateCalculatorTest {
         GalleryInfo invalid = gallery(3, 0, "artist:a");
         SubscriptionUpdateCalculator.Outcome result = SubscriptionUpdateCalculator.calculate(
                 new FeedBoundary(10, Collections.singleton(1L)), Collections.singletonList(invalid),
-                Collections.singleton("artist:a"), true);
+                Collections.singleton("artist:a"));
+        assertFalse(result.complete);
+    }
+
+    @Test public void unreadCountsAccumulateUntilViewed() {
+        Map<String, TagUpdateState> old = new HashMap<>();
+        old.put("artist:a", new TagUpdateState("artist:a", 3,
+                TagUpdateState.State.EXACT, 10));
+        Map<String, TagUpdateState> delta = new HashMap<>();
+        delta.put("artist:a", new TagUpdateState("artist:a", 2,
+                TagUpdateState.State.EXACT, 20));
+        assertEquals(5, SubscriptionUpdateCalculator.mergeUnread(old, delta, false)
+                .get("artist:a").count);
+        assertEquals(0, SubscriptionUpdateCalculator.mergeUnread(old, delta, true)
+                .get("artist:a").count);
+    }
+
+    @Test public void missingBoundaryNeverCommitsWithoutPageLimitShortcut() {
+        SubscriptionUpdateCalculator.Outcome result = SubscriptionUpdateCalculator.calculate(
+                new FeedBoundary(10, Collections.singleton(1L)),
+                Collections.singletonList(gallery(3, 11, "artist:a")),
+                Collections.singleton("artist:a"));
+        assertFalse(result.complete);
+    }
+
+    @Test public void nonDescendingFeedNeverCommits() {
+        SubscriptionUpdateCalculator.Outcome result = SubscriptionUpdateCalculator.calculate(
+                new FeedBoundary(10, Collections.singleton(1L)),
+                Arrays.asList(gallery(2, 12, "artist:a"), gallery(3, 13, "artist:a")),
+                Collections.singleton("artist:a"));
         assertFalse(result.complete);
     }
 }
