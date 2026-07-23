@@ -6,6 +6,9 @@
 An E-Hentai Application for Android.
 
 
+## 下载
+- [GitHub]([https://github.com/xiaojieonly/Ehviewer_CN_SXJ/releases](https://github.com/meidorei/Ehviewer_CN_SXJ_manbo/releases))
+
 # 追更功能
 
 ## 使用方法
