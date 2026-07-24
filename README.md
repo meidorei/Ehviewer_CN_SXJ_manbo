@@ -1,10 +1,5 @@
 ![Icon](fastlane/metadata/android/en-US/images/icon.png)
 
-这是一个 E-Hentai Android 平台的浏览器。
-
-
-An E-Hentai Application for Android.
-
 
 # 下载
 [GitHub](https://github.com/meidorei/Ehviewer_CN_SXJ_manbo/releases)
@@ -58,8 +53,19 @@ JM 使用易变的内部接口。出现“JM服务暂时不可用”时，请先
 
 
 
+# 下一步
+
+- [ ] 订阅有上限，把订阅改为自己实现的追更，更新追更后按更新数量排序
+- [ ] igneous开启代理后获取失败
+
+
+
+
+
+------
 
 # 原作者仓库
+
 ### [常见问题汇总](https://github.com/xiaojieonly/Ehviewer_CN_SXJ/blob/BiLi_PC_Gamer/feedauthor/EhviewerIssue.md)
 
 # Build
