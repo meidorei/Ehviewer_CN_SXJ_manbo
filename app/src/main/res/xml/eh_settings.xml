@@ -29,6 +29,18 @@
         android:title="@string/settings_eh_identity_cookies"
         app:allowDividerAbove="true" />
 
+    <com.hippo.preference.SwitchPreference
+        android:defaultValue="false"
+        android:key="cf_auto_retry"
+        android:summary="@string/settings_advanced_cf_auto_retry_summary"
+        android:title="@string/settings_advanced_cf_auto_retry_title" />
+
+    <androidx.preference.EditTextPreference
+        android:dialogTitle="@string/settings_advanced_cf_connecting_ip_title"
+        android:key="cf_connecting_ip"
+        android:singleLine="true"
+        android:title="@string/settings_advanced_cf_connecting_ip_title" />
+
 <!--    <com.hippo.preference.SwitchPreference-->
 <!--        android:defaultValue="false"-->
 <!--        android:key="lock_cookie_igneous"-->

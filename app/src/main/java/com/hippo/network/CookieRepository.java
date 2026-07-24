@@ -139,6 +139,29 @@ public class CookieRepository implements CookieJar {
   }
 
   /**
+   * Removes every cookie with {@code name} that would be sent to {@code url}.
+   */
+  public synchronized void removeCookies(HttpUrl url, String name) {
+    List<Cookie> cookies = new ArrayList<>(getCookies(url));
+    for (Cookie cookie : cookies) {
+      if (!ObjectUtils.equal(cookie.name(), name)) {
+        continue;
+      }
+      Cookie.Builder builder = new Cookie.Builder()
+          .name(cookie.name())
+          .value("")
+          .path(cookie.path())
+          .expiresAt(0L);
+      if (cookie.hostOnly()) {
+        builder.hostOnlyDomain(cookie.domain());
+      } else {
+        builder.domain(cookie.domain());
+      }
+      addCookie(builder.build());
+    }
+  }
+
+  /**
    * Remove all cookies in this {@code CookieRepository}.
    */
   public synchronized void clear() {

@@ -19,8 +19,10 @@ package com.hippo.ehviewer.ui.fragment;
 import android.app.Activity;
 import android.os.Build;
 import android.os.Bundle;
+import android.widget.Toast;
 
 import androidx.annotation.Nullable;
+import androidx.preference.EditTextPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 
@@ -29,6 +31,7 @@ import com.hippo.ehviewer.EhDB;
 import com.hippo.ehviewer.R;
 import com.hippo.ehviewer.Settings;
 import com.hippo.ehviewer.client.EhTagDatabase;
+import com.hippo.ehviewer.client.IgneousUtils;
 
 public class EhFragment extends BasePreferenceFragmentCompat
         implements Preference.OnPreferenceChangeListener {
@@ -48,6 +51,8 @@ public class EhFragment extends BasePreferenceFragmentCompat
         Preference showTagTranslations = findPreference(Settings.KEY_SHOW_TAG_TRANSLATIONS);
         Preference showGalleryComment = findPreference(Settings.KEY_SHOW_GALLERY_COMMENT);
         Preference tagTranslationsSource = findPreference("tag_translations_source");
+        EditTextPreference cfConnectingIp =
+                findPreference(Settings.KEY_CF_CONNECTING_IP);
 
         // System theme display
         Preference systemTheme = findPreference("system_theme");
@@ -65,6 +70,12 @@ public class EhFragment extends BasePreferenceFragmentCompat
         historyInfoSize.setOnPreferenceChangeListener(this);
         showTagTranslations.setOnPreferenceChangeListener(this);
         showGalleryComment.setOnPreferenceChangeListener(this);
+        if (cfConnectingIp != null) {
+            String currentIp = Settings.getCfConnectingIp();
+            cfConnectingIp.setText(currentIp);
+            cfConnectingIp.setSummary(currentIp);
+            cfConnectingIp.setOnPreferenceChangeListener(this);
+        }
 
         if (!EhTagDatabase.isPossible(getActivity())) {
             getPreferenceScreen().removePreference(showTagTranslations);
@@ -75,7 +86,21 @@ public class EhFragment extends BasePreferenceFragmentCompat
     @Override
     public boolean onPreferenceChange(Preference preference, Object newValue) {
         String key = preference.getKey();
-        if (Settings.KEY_THEME.equals(key)) {
+        if (Settings.KEY_CF_CONNECTING_IP.equals(key)) {
+            String ip = newValue instanceof String ? ((String) newValue).trim() : "";
+            if (!IgneousUtils.isValidIpAddress(ip)) {
+                Toast.makeText(getContext(),
+                        R.string.settings_advanced_cf_connecting_ip_invalid,
+                        Toast.LENGTH_LONG).show();
+                return false;
+            }
+            Settings.putCfConnectingIp(ip);
+            if (preference instanceof EditTextPreference) {
+                ((EditTextPreference) preference).setText(ip);
+            }
+            preference.setSummary(ip);
+            return false;
+        } else if (Settings.KEY_THEME.equals(key)) {
             ((EhApplication) getActivity().getApplication()).recreate();
             return true;
         } else if (Settings.KEY_APPLY_NAV_BAR_THEME_COLOR.equals(key)) {

@@ -30,6 +30,10 @@
     <string name="settings_advanced_dns_over_http_summary">解决某些地区的 DNS 污染问题</string>
     <string name="settings_advanced_domain_fronting_title">域名前置</string>
     <string name="settings_advanced_domain_fronting_summary">绕过 SNI 封锁</string>
+    <string name="settings_advanced_cf_auto_retry_title">Use CF-Connecting-IP when refreshing</string>
+    <string name="settings_advanced_cf_auto_retry_summary">Add the configured IP only to a manual IGNEOUS refresh request. Disabled by default.</string>
+    <string name="settings_advanced_cf_connecting_ip_title">IP address</string>
+    <string name="settings_advanced_cf_connecting_ip_invalid">Enter a valid IPv4 or IPv6 address</string>
     <string name="settings_advanced_url_replace_title">url伪装,需关闭SNI</string>
     <string name="settings_advanced_url_replace_summary">url伪装(需重启，开启后账户功能失效)</string>
     <string name="settings_about_donate_guide">支持指南</string>
@@ -592,6 +596,12 @@
     <string name="settings_eh_identity_cookies_signed">Identity cookies can be used to sign in to this account.&lt;br&gt;&lt;b&gt;KEEP IT SAFE&lt;/b&gt;&lt;br&gt;&lt;br&gt;%s</string>
     <string name="settings_eh_identity_cookies_tourist">Not signed in.</string>
     <string name="settings_eh_identity_cookies_copy">Copy</string>
+    <string name="settings_eh_refresh_igneous">Refresh IGNEOUS</string>
+    <string name="settings_eh_refreshing_igneous">Refreshing…</string>
+    <string name="settings_eh_refresh_igneous_success">IGNEOUS refreshed</string>
+    <string name="settings_eh_refresh_igneous_http_error">IGNEOUS refresh failed (HTTP %1$d)</string>
+    <string name="settings_eh_refresh_igneous_invalid_cookie">The server did not return a valid IGNEOUS cookie</string>
+    <string name="settings_eh_refresh_igneous_network_error">IGNEOUS refresh failed due to a network error</string>
     <string name="settings_u_config">EHentai settings</string>
     <string name="settings_u_config_summary">Settings on EHentai website</string>
     <string name="settings_my_tags">My tags</string>

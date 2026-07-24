@@ -56,6 +56,19 @@ public class EhCookieStore extends CookieRepository {
                 contains(url, KEY_IPD_PASS_HASH);
     }
 
+    public void removeIgneous() {
+        removeCookies(HttpUrl.get(EhUrl.HOST_EX), KEY_IGNEOUS);
+    }
+
+    public String getIgneous() {
+        for (Cookie cookie : getCookies(HttpUrl.get(EhUrl.HOST_EX))) {
+            if (KEY_IGNEOUS.equals(cookie.name())) {
+                return cookie.value();
+            }
+        }
+        return null;
+    }
+
     public static Cookie newCookie(Cookie cookie, String newDomain, boolean forcePersistent,
             boolean forceLongLive, boolean forceNotHostOnly) {
         Cookie.Builder builder = new Cookie.Builder();
