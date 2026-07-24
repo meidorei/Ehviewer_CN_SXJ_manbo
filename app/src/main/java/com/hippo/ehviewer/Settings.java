@@ -49,6 +49,7 @@ import java.io.File;
 import java.util.Date;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Random;
 
 public class Settings {
 
@@ -84,6 +85,9 @@ public class Settings {
             if ("CN".equals(Locale.getDefault().getCountry())) {
                 putDF(true);
             }
+        }
+        if (!sSettingsPre.contains(KEY_CF_CONNECTING_IP)) {
+            putCfConnectingIp(generateUsWarpIp());
         }
 
     }
@@ -1351,6 +1355,34 @@ public class Settings {
 
     public static void putDF(boolean value) {
         putBoolean(KEY_DOMAIN_FRONTING, value);
+    }
+
+    public static final String KEY_CF_AUTO_RETRY = "cf_auto_retry";
+
+    public static boolean getCfAutoRetry() {
+        return getBoolean(KEY_CF_AUTO_RETRY, false);
+    }
+
+    public static final String KEY_CF_CONNECTING_IP = "cf_connecting_ip";
+
+    public static String getCfConnectingIp() {
+        return getString(KEY_CF_CONNECTING_IP, null);
+    }
+
+    public static void putCfConnectingIp(String value) {
+        putString(KEY_CF_CONNECTING_IP, value);
+    }
+
+    public static String generateUsWarpIp() {
+        Random random = new Random();
+        char[] choices = {'8', 'a', 'c', 'e'};
+        char location = choices[random.nextInt(choices.length)];
+        int cityFirstNibble = random.nextInt(10);
+        int cityRest = random.nextInt(0x1000);
+        int randomPart1 = random.nextInt(0x1000);
+        int randomPart2 = random.nextInt(0x1000);
+        return String.format(Locale.US, "2a09:bac1:76%c0:%x%03x:0000:0000:0%03x:0%03x",
+                location, cityFirstNibble, cityRest, randomPart1, randomPart2);
     }
 
 

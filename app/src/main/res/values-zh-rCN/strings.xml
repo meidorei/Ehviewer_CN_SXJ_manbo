@@ -502,6 +502,12 @@
     <string name="settings_eh_identity_cookies_signed">身份 Cookie 可用于登录该账号。&lt;br&gt;&lt;b&gt;注意数据安全&lt;/b&gt;&lt;br&gt;&lt;br&gt;%s</string>
     <string name="settings_eh_identity_cookies_tourist">未登录</string>
     <string name="settings_eh_identity_cookies_copy">复制</string>
+    <string name="settings_eh_refresh_igneous">刷新 IGNEOUS</string>
+    <string name="settings_eh_refreshing_igneous">正在刷新…</string>
+    <string name="settings_eh_refresh_igneous_success">IGNEOUS 刷新成功</string>
+    <string name="settings_eh_refresh_igneous_http_error">IGNEOUS 刷新失败（HTTP %1$d）</string>
+    <string name="settings_eh_refresh_igneous_invalid_cookie">服务器未返回有效的 IGNEOUS Cookie</string>
+    <string name="settings_eh_refresh_igneous_network_error">网络错误，IGNEOUS 刷新失败</string>
     <string name="settings_u_config">EHentai 设置</string>
     <string name="settings_u_config_summary">EHentai 网站上的设置</string>
     <string name="settings_my_tags">我的标签</string>
@@ -707,6 +713,10 @@
     <string name="settings_advanced_dns_over_http_summary">解决某些地区的 DNS 污染问题</string>
     <string name="settings_advanced_domain_fronting_title">域名前置</string>
     <string name="settings_advanced_domain_fronting_summary">绕过 SNI 封锁</string>
+    <string name="settings_advanced_cf_auto_retry_title">刷新时使用 CF-Connecting-IP</string>
+    <string name="settings_advanced_cf_auto_retry_summary">仅在手动刷新 IGNEOUS 时为该请求添加配置的 IP，默认关闭。</string>
+    <string name="settings_advanced_cf_connecting_ip_title">IP 地址</string>
+    <string name="settings_advanced_cf_connecting_ip_invalid">请输入有效的 IPv4 或 IPv6 地址</string>
     <string name="settings_advanced_url_replace_title">url伪装,需关闭SNI</string>
     <string name="settings_advanced_url_replace_summary">url伪装(需重启，开启后账户功能失效)</string>
     <string name="share_favorites_dialog_title">分享收藏</string>

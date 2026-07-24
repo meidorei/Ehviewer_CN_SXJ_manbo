@@ -49,6 +49,7 @@ import com.hippo.ehviewer.client.EhClient;
 import com.hippo.ehviewer.client.EhCookieStore;
 import com.hippo.ehviewer.client.EhHosts;
 import com.hippo.ehviewer.client.EhEngine;
+import com.hippo.ehviewer.client.IgneousUtils;
 import com.hippo.ehviewer.client.data.EhNewsDetail;
 import com.hippo.ehviewer.client.data.GalleryDetail;
 import com.hippo.ehviewer.client.data.userTag.UserTagList;
@@ -418,6 +419,10 @@ public class EhApplication extends RecordingApplication {
                                 CookieManager cookieManager = CookieManager.getInstance();
                                 String url = chain.request().url().toString();
                                 for (String header : response.headers("Set-Cookie")) {
+                                    if (IgneousUtils.isMysterySetCookie(
+                                            header, chain.request().url())) {
+                                        continue;
+                                    }
                                     cookieManager.setCookie(url, header);
                                 }
                                 cookieManager.flush();
