@@ -173,6 +173,7 @@ public class Settings {
     }
 
     private static final String KEY_AUTO_APPEND_CHINESE = "auto_append_chinese";
+    private static final String KEY_GALLERY_LIST_DRAWER_PAGE = "gallery_list_drawer_page";
 
     public static boolean getAutoAppendChinese() {
         return getBoolean(KEY_AUTO_APPEND_CHINESE, false);
@@ -180,6 +181,14 @@ public class Settings {
 
     public static void putAutoAppendChinese(boolean value) {
         putBoolean(KEY_AUTO_APPEND_CHINESE, value);
+    }
+
+    public static int getGalleryListDrawerPage() {
+        return getInt(KEY_GALLERY_LIST_DRAWER_PAGE, 0);
+    }
+
+    public static void putGalleryListDrawerPage(int page) {
+        putInt(KEY_GALLERY_LIST_DRAWER_PAGE, page);
     }
 
     public static int getInt(String key, int defValue) {

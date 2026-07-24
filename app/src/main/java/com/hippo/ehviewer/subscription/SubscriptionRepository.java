@@ -85,7 +85,7 @@ public final class SubscriptionRepository {
 
     public FeedCheckpoint readCheckpoint(CheckpointKey key) {
         try (Cursor cursor = EhDB.getDatabase().rawQuery(
-                "SELECT PREVIOUS_TIME,CURRENT_TIME,PREVIOUS_GIDS,CURRENT_GIDS,UPDATED_AT " +
+                "SELECT PREVIOUS_TIME,\"CURRENT_TIME\",PREVIOUS_GIDS,CURRENT_GIDS,UPDATED_AT " +
                         "FROM FEED_CHECKPOINT WHERE ACCOUNT_KEY=? AND SOURCE_TYPE=? AND SOURCE_KEY=? AND QUERY_SIGNATURE=?",
                 args(key))) {
             if (!cursor.moveToFirst()) return new FeedCheckpoint(FeedBoundary.EMPTY, FeedBoundary.EMPTY, 0);
