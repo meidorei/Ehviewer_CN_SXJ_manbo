@@ -7,6 +7,7 @@ public final class SubscriptionRefreshStatus {
     private static final String KEY_ACCOUNT = "subscription_refresh_status_account";
     private static final String KEY_RESULT = "subscription_refresh_status_result";
     private static final String KEY_TIME = "subscription_refresh_status_time";
+    private static final String KEY_ERROR = "subscription_refresh_status_error";
 
     public enum Result { SUCCESS, FAILURE, CANCELLED }
 
@@ -22,6 +23,11 @@ public final class SubscriptionRefreshStatus {
         Settings.putString(KEY_ACCOUNT, accountKey);
         Settings.putString(KEY_RESULT, result.name());
         Settings.putLong(KEY_TIME, time);
+        if (result == Result.SUCCESS) Settings.putString(KEY_ERROR, "");
+    }
+
+    public static void saveError(String error) {
+        Settings.putString(KEY_ERROR, error == null ? "" : error);
     }
 
     public static SubscriptionRefreshStatus read(String accountKey) {

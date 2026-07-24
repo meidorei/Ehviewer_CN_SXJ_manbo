@@ -76,10 +76,14 @@ class GalleryListSceneDialog(val baseScene: BaseScene) {
             requestTag(tagName, false)
         }
         dialog.show()
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.apply {
-            textSize = 17f
-            minWidth = (96 * resources.displayMetrics.density).toInt()
-            minHeight = (48 * resources.displayMetrics.density).toInt()
+        val buttonMinWidth = (96 * context.resources.displayMetrics.density).toInt()
+        val buttonMinHeight = (48 * context.resources.displayMetrics.density).toInt()
+        listOf(AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_POSITIVE).forEach { which ->
+            dialog.getButton(which)?.apply {
+                textSize = 18f
+                minWidth = buttonMinWidth
+                minHeight = buttonMinHeight
+            }
         }
     }
 

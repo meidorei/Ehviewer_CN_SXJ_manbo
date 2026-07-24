@@ -416,8 +416,12 @@ public final class GalleryListScene extends BaseScene
         if (context == null || !context.showsMarker()) return;
         SubscriptionRepository repository = SubscriptionRepository.getInstance();
         repository.execute(() -> {
-            FeedCheckpoint checkpoint = repository.readCheckpoint(seenCheckpointKey(context));
-            FeedBoundary boundary = checkpoint.current;
+            boolean subscriptionAggregate =
+                    context.type == FeedSourceContext.Type.SUBSCRIPTION_AGGREGATE;
+            FeedCheckpoint checkpoint = repository.readCheckpoint(subscriptionAggregate
+                    ? syncCheckpointKey(context) : seenCheckpointKey(context));
+            FeedBoundary boundary = subscriptionAggregate
+                    ? checkpoint.previous : checkpoint.current;
             if (mFeedSourceContext != context) return;
             mVisibleFeedBoundary = boundary;
             if (mRecyclerView != null) mRecyclerView.post(() -> {
@@ -1216,6 +1220,14 @@ public final class GalleryListScene extends BaseScene
         DrawViewPagerAdapter pagerAdapter = new DrawViewPagerAdapter(views);
 
         drawPager.setAdapter(pagerAdapter);
+        drawPager.setCurrentItem(Math.max(0, Math.min(
+                Settings.getGalleryListDrawerPage(), views.size() - 1)), false);
+        drawPager.addOnPageChangeListener(new ViewPager.SimpleOnPageChangeListener() {
+            @Override
+            public void onPageSelected(int position) {
+                Settings.putGalleryListDrawerPage(position);
+            }
+        });
 
         return view;
     }
@@ -1259,7 +1271,6 @@ public final class GalleryListScene extends BaseScene
         setFeedSource(FeedSourceContext.Type.SUBSCRIPTION_AGGREGATE, "watched", "");
         // A manual sync displays refreshed data but must never advance a seen boundary.
         mRecordSeenOnLoad = false;
-        closeDrawer(Gravity.RIGHT);
         SubscriptionRepository repository = SubscriptionRepository.getInstance();
         FeedSourceContext context = mFeedSourceContext;
         repository.execute(() -> {
@@ -1297,6 +1308,9 @@ public final class GalleryListScene extends BaseScene
                             }
 
                             @Override public void onFailure(Exception e) {
+                                Log.e(TAG, "Subscription refresh request failed", e);
+                                SubscriptionRefreshStatus.saveError(
+                                        e.getClass().getSimpleName() + ": " + e.getMessage());
                                 if (mSubscriptionDraw != null) mSubscriptionDraw.showRefreshResult(
                                         SubscriptionRefreshStatus.Result.FAILURE,
                                         System.currentTimeMillis());
@@ -1331,6 +1345,19 @@ public final class GalleryListScene extends BaseScene
             SubscriptionUpdateCalculator.Outcome outcome = SubscriptionUpdateCalculator.calculate(
                     checkpoint.current, scan.galleries, tags);
             if (!outcome.complete) {
+                StringBuilder failure = new StringBuilder(outcome.error)
+                        .append(", galleries=").append(scan.galleries.size())
+                        .append(", reachedBoundary=").append(scan.reachedBoundary)
+                        .append(", expectedTime=").append(checkpoint.current.time)
+                        .append(", expectedGids=").append(checkpoint.current.gids);
+                for (GalleryInfo gallery : scan.galleries) {
+                    if (checkpoint.current.gids.contains(gallery.gid)) {
+                        failure.append(", matchedGid=").append(gallery.gid)
+                                .append(", matchedTime=").append(gallery.postedTimestamp);
+                    }
+                }
+                Log.e(TAG, "Subscription refresh validation failed: " + failure);
+                SubscriptionRefreshStatus.saveError(failure.toString());
                 MainActivity failedActivity = getActivity2();
                 if (failedActivity != null) failedActivity.runOnUiThread(() -> {
                     if (mSubscriptionDraw != null) mSubscriptionDraw.showRefreshResult(
@@ -1414,6 +1441,8 @@ public final class GalleryListScene extends BaseScene
         DrawViewPagerAdapter pagerAdapter = new DrawViewPagerAdapter(views);
 
         drawPager.setAdapter(pagerAdapter);
+        drawPager.setCurrentItem(Math.max(0, Math.min(
+                Settings.getGalleryListDrawerPage(), views.size() - 1)), false);
     }
 
     public void onAutoAppendChineseChanged() {
