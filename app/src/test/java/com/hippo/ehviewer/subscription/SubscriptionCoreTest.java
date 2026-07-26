@@ -46,4 +46,32 @@ public class SubscriptionCoreTest {
         assertNotEquals(aggregateSeen.sourceType, tagSeen.sourceType);
         assertEquals("artist:a", tagSeen.sourceKey);
     }
+
+    @Test public void updateMarkerOnlyShowsForUpdateSources() {
+        assertFalse(new FeedSourceContext(
+                FeedSourceContext.Type.HOME, "home", "").showsMarker());
+        assertFalse(new FeedSourceContext(
+                FeedSourceContext.Type.TEMP_SEARCH, "", "foo").showsMarker());
+        assertTrue(new FeedSourceContext(
+                FeedSourceContext.Type.SUBSCRIPTION_AGGREGATE, "watched", "").showsMarker());
+        assertTrue(new FeedSourceContext(
+                FeedSourceContext.Type.SUBSCRIPTION_TAG, "artist:a", "").showsMarker());
+        assertTrue(new FeedSourceContext(
+                FeedSourceContext.Type.QUICK_SEARCH, "42", "foo").showsMarker());
+    }
+
+    @Test public void localBadgeCapsAtTwentyPlus() {
+        TagUpdateState state = new TagUpdateState("artist:a", 21,
+                TagUpdateState.State.EXACT, 1);
+        assertEquals(20, state.count);
+        assertEquals(TagUpdateState.State.LOWER_BOUND, state.state);
+        assertEquals("20+", state.displayCount());
+    }
+
+    @Test public void localTagNormalizationIsStable() {
+        assertEquals("artist:foo bar",
+                SubscriptionRepository.normalizeTagName("  Artist:Foo   Bar  "));
+        assertTrue(LocalFollowJson.isValidStandardTag("artist:foo bar"));
+        assertFalse(LocalFollowJson.isValidStandardTag("arbitrary search"));
+    }
 }

@@ -19,7 +19,7 @@ import com.hippo.ehviewer.subscription.SubscriptionSchema;
  * Master of DAO (schema version 6): knows all DAOs.
  */
 public class DaoMaster extends AbstractDaoMaster {
-    public static final int SCHEMA_VERSION = 8;
+    public static final int SCHEMA_VERSION = 10;
 
     /** Creates underlying database table using DAOs. */
     public static void createAllTables(Database db, boolean ifNotExists) {
@@ -48,6 +48,7 @@ public class DaoMaster extends AbstractDaoMaster {
         LocalFavoritesDao.dropTable(db, ifExists);
         BookmarksBao.dropTable(db, ifExists);
         FilterDao.dropTable(db, ifExists);
+        SubscriptionSchema.dropTables(db);
     }
 
     /**

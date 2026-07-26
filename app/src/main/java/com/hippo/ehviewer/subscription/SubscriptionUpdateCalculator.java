@@ -96,8 +96,12 @@ public final class SubscriptionUpdateCalculator {
             TagUpdateState delta = entry.getValue();
             TagUpdateState old = existing.get(entry.getKey());
             int count = baselineOnly ? 0 : old == null ? delta.count : old.count + delta.count;
+            boolean capped = !baselineOnly && ((old != null && old.state == TagUpdateState.State.LOWER_BOUND)
+                    || delta.state == TagUpdateState.State.LOWER_BOUND
+                    || count > TagUpdateState.DISPLAY_CAP);
             merged.put(entry.getKey(), new TagUpdateState(entry.getKey(), count,
-                    TagUpdateState.State.EXACT, delta.checkedAt));
+                    capped ? TagUpdateState.State.LOWER_BOUND : TagUpdateState.State.EXACT,
+                    delta.checkedAt));
         }
         return Collections.unmodifiableMap(merged);
     }

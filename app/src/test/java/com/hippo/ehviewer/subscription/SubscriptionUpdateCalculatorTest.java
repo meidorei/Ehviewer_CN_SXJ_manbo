@@ -64,6 +64,20 @@ public class SubscriptionUpdateCalculatorTest {
                 .get("artist:a").count);
     }
 
+    @Test public void unreadCountsBecomeCappedLowerBound() {
+        Map<String, TagUpdateState> old = new HashMap<>();
+        old.put("artist:a", new TagUpdateState("artist:a", 18,
+                TagUpdateState.State.EXACT, 10));
+        Map<String, TagUpdateState> delta = new HashMap<>();
+        delta.put("artist:a", new TagUpdateState("artist:a", 5,
+                TagUpdateState.State.EXACT, 20));
+        TagUpdateState merged = SubscriptionUpdateCalculator.mergeUnread(old, delta, false)
+                .get("artist:a");
+        assertEquals(20, merged.count);
+        assertEquals(TagUpdateState.State.LOWER_BOUND, merged.state);
+        assertEquals("20+", merged.displayCount());
+    }
+
     @Test public void missingBoundaryNeverCommitsWithoutPageLimitShortcut() {
         SubscriptionUpdateCalculator.Outcome result = SubscriptionUpdateCalculator.calculate(
                 new FeedBoundary(10, Collections.singleton(1L)),

@@ -20,6 +20,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -35,6 +36,9 @@ import com.hippo.ehviewer.AppConfig;
 import com.hippo.ehviewer.EhApplication;
 import com.hippo.ehviewer.EhDB;
 import com.hippo.ehviewer.R;
+import com.hippo.ehviewer.subscription.LocalFollowJson;
+import com.hippo.ehviewer.subscription.LocalFollowRepository;
+import com.hippo.ehviewer.subscription.LocalUpdateService;
 import com.hippo.ehviewer.ui.wifi.WiFiClientActivity;
 import com.hippo.ehviewer.ui.wifi.WiFiServerActivity;
 import com.hippo.ehviewer.widget.ProgressHelper;
@@ -42,7 +46,10 @@ import com.hippo.util.LogCat;
 import com.hippo.util.ReadableTime;
 
 import java.io.File;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Arrays;
+import java.util.List;
 
 public class AdvancedFragment extends BasePreferenceFragmentCompat
         implements Preference.OnPreferenceClickListener, Preference.OnPreferenceChangeListener {
@@ -56,8 +63,12 @@ public class AdvancedFragment extends BasePreferenceFragmentCompat
     private static final String KEY_CLEAR_MEMORY_CACHE = "clear_memory_cache";
     private static final String KEY_APP_LANGUAGE = "app_language";
     private static final String KEY_IMPORT_DATA = "import_data";
+    private static final String KEY_EXPORT_LOCAL_FOLLOWS = "export_local_follows";
+    private static final String KEY_IMPORT_LOCAL_FOLLOWS = "import_local_follows";
     private static final String KEY_WIFI_SERVER = "wifi_server";
     private static final String KEY_WIFI_CLIENT = "wifi_client";
+    private static final int REQUEST_EXPORT_LOCAL_FOLLOWS = 4101;
+    private static final int REQUEST_IMPORT_LOCAL_FOLLOWS = 4102;
 
     private final DbSyncHandle dbSyncHandle = new DbSyncHandle(Looper.getMainLooper());
 
@@ -72,12 +83,16 @@ public class AdvancedFragment extends BasePreferenceFragmentCompat
         Preference clearMemoryCache = findPreference(KEY_CLEAR_MEMORY_CACHE);
         Preference appLanguage = findPreference(KEY_APP_LANGUAGE);
         Preference importData = findPreference(KEY_IMPORT_DATA);
+        Preference exportLocalFollows = findPreference(KEY_EXPORT_LOCAL_FOLLOWS);
+        Preference importLocalFollows = findPreference(KEY_IMPORT_LOCAL_FOLLOWS);
         Preference socketData = findPreference(KEY_WIFI_SERVER);
         Preference clientData = findPreference(KEY_WIFI_CLIENT);
 
         dumpLogcat.setOnPreferenceClickListener(this);
         clearMemoryCache.setOnPreferenceClickListener(this);
         importData.setOnPreferenceClickListener(this);
+        exportLocalFollows.setOnPreferenceClickListener(this);
+        importLocalFollows.setOnPreferenceClickListener(this);
         socketData.setOnPreferenceClickListener(this);
         clientData.setOnPreferenceClickListener(this);
 
@@ -101,6 +116,12 @@ public class AdvancedFragment extends BasePreferenceFragmentCompat
                 importData(getActivity());
                 getActivity().setResult(Activity.RESULT_OK);
                 return true;
+            case KEY_EXPORT_LOCAL_FOLLOWS:
+                chooseLocalFollowExportTarget();
+                return true;
+            case KEY_IMPORT_LOCAL_FOLLOWS:
+                chooseLocalFollowImportSource();
+                return true;
             case KEY_WIFI_SERVER:
                 return gotoWiFiServerActivity();
             case KEY_WIFI_CLIENT:
@@ -108,6 +129,98 @@ public class AdvancedFragment extends BasePreferenceFragmentCompat
             default:
                 return false;
         }
+    }
+
+    private void chooseLocalFollowExportTarget() {
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("application/json");
+        intent.putExtra(Intent.EXTRA_TITLE, "ehviewer-local-follows.json");
+        startActivityForResult(intent, REQUEST_EXPORT_LOCAL_FOLLOWS);
+    }
+
+    private void chooseLocalFollowImportSource() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("application/json");
+        startActivityForResult(intent, REQUEST_IMPORT_LOCAL_FOLLOWS);
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null) return;
+        Uri uri = data.getData();
+        if (requestCode == REQUEST_EXPORT_LOCAL_FOLLOWS) {
+            exportLocalFollows(uri);
+        } else if (requestCode == REQUEST_IMPORT_LOCAL_FOLLOWS) {
+            importLocalFollows(uri);
+        }
+    }
+
+    private void exportLocalFollows(Uri uri) {
+        Context current = getContext();
+        if (current == null) return;
+        new Thread(() -> {
+            String message;
+            try (OutputStream output = current.getContentResolver().openOutputStream(uri, "wt")) {
+                if (output == null) throw new IllegalStateException("无法打开导出文件");
+                List<String> tags = LocalFollowRepository.getInstance().getAll();
+                LocalFollowJson.write(output, tags);
+                message = getString(R.string.local_follow_export_success, tags.size());
+            } catch (Exception e) {
+                message = getString(R.string.local_follow_export_failed, e.getMessage());
+            }
+            String finalMessage = message;
+            dbSyncHandle.post(() -> Toast.makeText(current, finalMessage, Toast.LENGTH_LONG).show());
+        }, "local-follow-export").start();
+    }
+
+    private void importLocalFollows(Uri uri) {
+        Context current = getContext();
+        if (current == null) return;
+        new Thread(() -> {
+            try (InputStream input = current.getContentResolver().openInputStream(uri)) {
+                if (input == null) throw new IllegalStateException("无法打开导入文件");
+                LocalFollowJson.ParseResult parsed = LocalFollowJson.read(input);
+                dbSyncHandle.post(() -> showLocalFollowImportMode(current, parsed));
+            } catch (Exception e) {
+                String message = getString(R.string.local_follow_import_failed, e.getMessage());
+                dbSyncHandle.post(() -> Toast.makeText(current, message, Toast.LENGTH_LONG).show());
+            }
+        }, "local-follow-import").start();
+    }
+
+    private void showLocalFollowImportMode(Context current, LocalFollowJson.ParseResult parsed) {
+        new AlertDialog.Builder(current)
+                .setTitle(R.string.settings_advanced_import_local_follows)
+                .setMessage(getString(R.string.local_follow_import_preview,
+                        parsed.tags.size(), parsed.invalid, parsed.duplicates))
+                .setPositiveButton(R.string.local_follow_import_merge,
+                        (dialog, which) -> commitLocalFollowImport(current, parsed, false))
+                .setNeutralButton(R.string.local_follow_import_replace,
+                        (dialog, which) -> new AlertDialog.Builder(current)
+                                .setTitle(R.string.local_follow_import_replace)
+                                .setMessage(R.string.local_follow_import_replace_confirm)
+                                .setNegativeButton(android.R.string.cancel, null)
+                                .setPositiveButton(android.R.string.ok,
+                                        (confirm, ignored) ->
+                                                commitLocalFollowImport(current, parsed, true))
+                                .show())
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void commitLocalFollowImport(Context current, LocalFollowJson.ParseResult parsed,
+                                         boolean replace) {
+        new Thread(() -> {
+            LocalFollowRepository.ImportResult result =
+                    LocalFollowRepository.getInstance().importTags(parsed.tags, replace);
+            LocalUpdateService.startPendingBaselines(current);
+            String message = getString(R.string.local_follow_import_success, result.after,
+                    parsed.invalid, parsed.duplicates);
+            dbSyncHandle.post(() -> Toast.makeText(current, message, Toast.LENGTH_LONG).show());
+        }, "local-follow-import-commit").start();
     }
 
     private boolean gotoWiFiClientActivity() {

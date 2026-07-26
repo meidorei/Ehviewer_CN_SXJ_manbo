@@ -12,15 +12,7 @@
         android:background="?attr/toolbarColor"
         android:saveEnabled="false"
         android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar"
-        app:popupTheme="?attr/toolbarPopupTheme">
-        <com.github.ybq.android.spinkit.SpinKitView
-            android:id="@+id/spin_kit"
-            style="@style/SpinKitView.Small.Pulse"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center_vertical"
-            app:SpinKit_Color="?android:attr/textColorPrimary" />
-    </androidx.appcompat.widget.Toolbar>
+        app:popupTheme="?attr/toolbarPopupTheme" />
 
     <FrameLayout
         android:layout_width="match_parent"

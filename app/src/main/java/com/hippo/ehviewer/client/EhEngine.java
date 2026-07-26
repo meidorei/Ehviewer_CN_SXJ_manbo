@@ -302,17 +302,88 @@ public class EhEngine {
         return result;
     }
 
+    /**
+     * Gallery-list fetch for local update checks. It intentionally bypasses the user's local
+     * title/uploader/tag filters and guarantees timestamp/tag metadata for counting.
+     */
+    public static GalleryListParser.Result getGalleryListForUpdate(
+            @Nullable EhClient.Task task, OkHttpClient okHttpClient, String url, int mode)
+            throws Throwable {
+        return getGalleryListForUpdate(task, okHttpClient, url, mode, null);
+    }
+
+    public interface CallObserver {
+        void onCall(@Nullable Call call);
+    }
+
+    public static GalleryListParser.Result getGalleryListForUpdate(
+            @Nullable EhClient.Task task, OkHttpClient okHttpClient, String url, int mode,
+            @Nullable CallObserver observer)
+            throws Throwable {
+        String referer = url.startsWith(EhUrl.HOST_EX) ? EhUrl.REFERER_EX : EhUrl.REFERER_E;
+        Request request = new EhRequestBuilder(url, referer).build();
+        Call call = okHttpClient.newCall(request);
+        if (task != null) task.setCall(call);
+        if (observer != null) observer.onCall(call);
+        String body = null;
+        Headers headers = null;
+        int code = -1;
+        try {
+            Response response = call.execute();
+            code = response.code();
+            headers = response.headers();
+            if (response.body() == null) throw new ParseException("Empty response", url);
+            body = response.body().string();
+            GalleryListParser.Result result = GalleryListParser.parse(body, mode);
+            boolean incomplete = false;
+            for (GalleryInfo gallery : result.galleryInfoList) {
+                if (gallery.simpleTags == null || gallery.postedTimestamp <= 0
+                        || gallery.category == EhUtils.UNKNOWN
+                        || gallery.uploader == null || gallery.pages <= 0
+                        || gallery.rating < 0) {
+                    incomplete = true;
+                    break;
+                }
+            }
+            if (incomplete && !result.galleryInfoList.isEmpty()) {
+                fillGalleryListByApi(task, okHttpClient, result.galleryInfoList, url, observer);
+            }
+            for (GalleryInfo info : result.galleryInfoList) {
+                info.thumb = EhUrl.getFixedPreviewThumbUrl(info.thumb);
+            }
+            return result;
+        } catch (Throwable e) {
+            ExceptionUtils.throwIfFatal(e);
+            throwException(call, code, headers, body, e);
+            throw e;
+        } finally {
+            if (observer != null) observer.onCall(null);
+        }
+    }
+
     // At least, GalleryInfo contain valid gid and token
     public static List<GalleryInfo> fillGalleryListByApi(@Nullable EhClient.Task task, OkHttpClient okHttpClient,
                                                          List<GalleryInfo> galleryInfoList, String referer) throws Throwable {
+        return fillGalleryListByApi(task, okHttpClient, galleryInfoList, referer, null);
+    }
+
+    private static List<GalleryInfo> fillGalleryListByApi(
+            @Nullable EhClient.Task task, OkHttpClient okHttpClient,
+            List<GalleryInfo> galleryInfoList, String referer,
+            @Nullable CallObserver observer) throws Throwable {
         // We can only request 25 items one time at most
         final int MAX_REQUEST_SIZE = 25;
         List<GalleryInfo> requestItems = new ArrayList<>(MAX_REQUEST_SIZE);
+        int batches = 0;
         for (int i = 0, size = galleryInfoList.size(); i < size; i++) {
             requestItems.add(galleryInfoList.get(i));
             if (requestItems.size() == MAX_REQUEST_SIZE || i == size - 1) {
-                doFillGalleryListByApi(task, okHttpClient, requestItems, referer);
+                doFillGalleryListByApi(task, okHttpClient, requestItems, referer, observer);
+                batches++;
                 requestItems.clear();
+                if (batches % 4 == 0 && i < size - 1) {
+                    Thread.sleep(5000L);
+                }
             }
         }
         return galleryInfoList;
@@ -364,7 +435,8 @@ public class EhEngine {
     }
 
     private static void doFillGalleryListByApi(@Nullable EhClient.Task task, OkHttpClient okHttpClient,
-                                               List<GalleryInfo> galleryInfoList, String referer) throws Throwable {
+                                               List<GalleryInfo> galleryInfoList, String referer,
+                                               @Nullable CallObserver observer) throws Throwable {
         JSONObject json = new JSONObject();
         json.put("method", "gdata");
         JSONArray ja = new JSONArray();
@@ -377,7 +449,8 @@ public class EhEngine {
         }
         json.put("gidlist", ja);
         json.put("namespace", 1);
-        String url = EhUrl.getApiUrl();
+        String url = referer != null && referer.startsWith(EhUrl.HOST_EX)
+                ? EhUrl.API_EX : EhUrl.API_E;
         String origin = EhUrl.getOrigin();
         Log.d(TAG, url);
         Request request = new EhRequestBuilder(url, referer, origin)
@@ -389,6 +462,7 @@ public class EhEngine {
         if (null != task) {
             task.setCall(call);
         }
+        if (observer != null) observer.onCall(call);
 
         String body = null;
         Headers headers = null;
@@ -404,6 +478,8 @@ public class EhEngine {
             ExceptionUtils.throwIfFatal(e);
             throwException(call, code, headers, body, e);
             throw e;
+        } finally {
+            if (observer != null) observer.onCall(null);
         }
     }
 //    https://e-hentai.org/g/2914213/fc8bce61d9/

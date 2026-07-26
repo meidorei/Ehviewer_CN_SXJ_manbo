@@ -17,5 +17,9 @@ public final class FeedSourceContext {
         return type == Type.HOME || type == Type.SUBSCRIPTION_AGGREGATE || type == Type.QUICK_SEARCH;
     }
 
-    public boolean showsMarker() { return type != Type.TEMP_SEARCH; }
+    public boolean showsMarker() {
+        return type == Type.SUBSCRIPTION_AGGREGATE
+                || type == Type.SUBSCRIPTION_TAG
+                || type == Type.QUICK_SEARCH;
+    }
 }

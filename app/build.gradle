@@ -66,6 +66,14 @@ android {
         }
     }
 
+    applicationVariants.all { variant ->
+        if (variant.buildType.name == "debug") {
+            variant.outputs.all { output ->
+                output.versionCodeOverride = 116
+            }
+        }
+    }
+
     externalNativeBuild {
         cmake {
 //            version '3.30.5'

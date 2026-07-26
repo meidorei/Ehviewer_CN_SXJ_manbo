@@ -404,6 +404,8 @@ public class WiFiClientActivity extends AppCompatActivity {
         }
         new Thread(()->{
             EhDB.takeOverQuickSearchList(quickSearchList);
+            com.hippo.ehviewer.subscription.LocalUpdateService
+                    .startPendingBaselines(WiFiClientActivity.this);
             connectThread.dataProcessed(response);
             updateReceiveMessage(getString(R.string.wifi_server_receive_message, response.toString()));
             EventBus.getDefault().post(bookmarkDrawNeedRefresh());

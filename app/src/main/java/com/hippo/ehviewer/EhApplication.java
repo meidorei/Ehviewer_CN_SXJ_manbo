@@ -56,6 +56,8 @@ import com.hippo.ehviewer.client.data.userTag.UserTagList;
 import com.hippo.ehviewer.download.ArchiverDownloadCompleter;
 import com.hippo.ehviewer.download.DownloadManager;
 import com.hippo.ehviewer.spider.SpiderDen;
+import com.hippo.ehviewer.subscription.SubscriptionSnapshot;
+import com.hippo.ehviewer.subscription.LocalRefreshJobStore;
 import com.hippo.ehviewer.ui.CommonOperations;
 import com.hippo.lib.image.Image;
 //import com.hippo.lib.image.Image1;
@@ -184,6 +186,8 @@ public class EhApplication extends RecordingApplication {
         AppConfig.initialize(this);
         SpiderDen.initialize(this);
         EhDB.initialize(this);
+        SubscriptionSnapshot.refreshFromDatabase();
+        LocalRefreshJobStore.recoverInterruptedJob();
         EhEngine.initialize();
         BitmapUtils.initialize(this);
 //        Image1.initialize(this);
