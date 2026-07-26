@@ -1,6 +1,7 @@
 package com.hippo.ehviewer.subscription;
 
 public final class TagUpdateState {
+    public static final int DISPLAY_CAP = 20;
     public enum State { EXACT, LOWER_BOUND, UNKNOWN }
 
     public final String tagName;
@@ -10,13 +11,14 @@ public final class TagUpdateState {
 
     public TagUpdateState(String tagName, int count, State state, long checkedAt) {
         this.tagName = SubscriptionRepository.normalizeTagName(tagName);
-        this.count = Math.max(0, count);
-        this.state = state;
+        int normalized = Math.max(0, count);
+        this.count = Math.min(DISPLAY_CAP, normalized);
+        this.state = normalized > DISPLAY_CAP ? State.LOWER_BOUND : state;
         this.checkedAt = checkedAt;
     }
 
     public String displayCount() {
         if (state == State.UNKNOWN) return "?";
-        return Integer.toString(count) + (state == State.LOWER_BOUND ? "+" : "");
+        return state == State.LOWER_BOUND ? DISPLAY_CAP + "+" : Integer.toString(count);
     }
 }

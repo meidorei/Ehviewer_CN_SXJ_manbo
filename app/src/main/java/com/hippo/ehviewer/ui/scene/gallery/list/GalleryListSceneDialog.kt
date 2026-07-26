@@ -25,6 +25,9 @@ import com.hippo.ehviewer.ui.MainActivity
 import com.hippo.ehviewer.ui.scene.BaseScene
 import com.hippo.ehviewer.ui.scene.EhCallback
 import com.hippo.ehviewer.util.TagTranslationUtil
+import com.hippo.ehviewer.subscription.LocalFollowRepository
+import com.hippo.ehviewer.subscription.LocalUpdateService
+import com.hippo.ehviewer.ui.scene.gallery.detail.GalleryDetailScene
 import com.hippo.scene.SceneFragment
 
 class GalleryListSceneDialog(val baseScene: BaseScene) {
@@ -52,17 +55,29 @@ class GalleryListSceneDialog(val baseScene: BaseScene) {
         val builder = AlertDialog.Builder(context!!)
             .setTitle(title)
             .setView(content)
-            .setNegativeButton(R.string.copy_tag) { _: DialogInterface?, _: Int ->
-                copyTag(tagName)
-            }
-        if (Settings.isLogin()) {
-            builder.setPositiveButton(R.string.subscription_watched) {
-                    _: DialogInterface?, _: Int -> requestTag(tagName, true)
-            }
-        } else {
+        if (!Settings.isLogin()) {
             content.findViewById<View>(R.id.tag_action_exclude).visibility = View.GONE
+            content.findViewById<View>(R.id.tag_action_subscribe).visibility = View.GONE
         }
         val dialog = builder.create()
+        content.findViewById<android.widget.Button>(R.id.tag_action_copy).setOnClickListener {
+            dialog.dismiss()
+            copyTag(tagName)
+        }
+        content.findViewById<android.widget.Button>(R.id.tag_action_subscribe).setOnClickListener {
+            dialog.dismiss()
+            requestTag(tagName, true)
+        }
+        content.findViewById<android.widget.Button>(R.id.tag_action_follow).apply {
+            setText(
+                if (LocalFollowRepository.getInstance().contains(tagName))
+                    R.string.local_unfollow else R.string.local_follow
+            )
+            setOnClickListener {
+                dialog.dismiss()
+                toggleLocalFollow()
+            }
+        }
         content.findViewById<View>(R.id.tag_action_definition).setOnClickListener {
             dialog.dismiss()
             UrlOpener.openUrl(context, EhUrl.getTagDefinitionUrl(temp), false)
@@ -76,14 +91,24 @@ class GalleryListSceneDialog(val baseScene: BaseScene) {
             requestTag(tagName, false)
         }
         dialog.show()
-        val buttonMinWidth = (96 * context.resources.displayMetrics.density).toInt()
-        val buttonMinHeight = (48 * context.resources.displayMetrics.density).toInt()
-        listOf(AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_POSITIVE).forEach { which ->
-            dialog.getButton(which)?.apply {
-                textSize = 18f
-                minWidth = buttonMinWidth
-                minHeight = buttonMinHeight
-            }
+    }
+
+    private fun toggleLocalFollow() {
+        val tag = tagName ?: return
+        val repository = LocalFollowRepository.getInstance()
+        val message: Int
+        if (repository.contains(tag)) {
+            repository.remove(tag)
+            message = R.string.local_follow_removed
+        } else if (repository.add(tag)) {
+            LocalUpdateService.startPendingBaselines(context!!)
+            message = R.string.local_follow_added
+        } else {
+            message = R.string.local_follow_already
+        }
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        if (baseScene is GalleryDetailScene) {
+            baseScene.refreshLocalFollowHighlights()
         }
     }
 

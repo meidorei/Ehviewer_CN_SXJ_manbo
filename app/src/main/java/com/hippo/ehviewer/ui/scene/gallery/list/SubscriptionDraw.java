@@ -4,7 +4,6 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.view.LayoutInflater;
-import android.view.MenuItem;
 import android.view.View;
 import android.widget.AbsListView;
 import android.widget.FrameLayout;
@@ -13,6 +12,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.Toolbar;
 import androidx.viewpager.widget.ViewPager;
 
@@ -37,21 +37,22 @@ import com.hippo.ehviewer.subscription.SubscriptionRefreshStatus;
 import com.hippo.ehviewer.subscription.SubscriptionScanProgress;
 import com.hippo.ehviewer.subscription.SubscriptionSnapshot;
 import com.hippo.ehviewer.subscription.TagUpdateState;
+import com.hippo.ehviewer.subscription.LocalFollowRepository;
+import com.hippo.ehviewer.subscription.LocalRefreshJobStore;
+import com.hippo.ehviewer.subscription.LocalUpdateService;
 import com.hippo.scene.Announcer;
 import com.hippo.scene.SceneFragment;
 import com.hippo.widget.ProgressView;
 import com.hippo.lib.yorozuya.AssertUtils;
 import com.hippo.lib.yorozuya.ViewUtils;
 
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
-import java.util.Locale;
 import java.util.Map;
+import java.util.Comparator;
 
 import static com.hippo.ehviewer.Settings.*;
 
-public class SubscriptionDraw {
+public class SubscriptionDraw implements LocalUpdateService.Listener {
 
     private static final String SUBSCRIPTION_DRAW_SCROLL_Y = "SubscriptionDrawScrollY";
     private static final String SUBSCRIPTION_DRAW_POS = "SubscriptionDrawPos";
@@ -79,7 +80,8 @@ public class SubscriptionDraw {
 
     private String tagName;
     private SubscriptionItemAdapter adapter;
-    private TextView refreshStatusView;
+    private Toolbar toolbar;
+    private LocalUpdateToolbarController updateToolbar;
 
 
 
@@ -100,6 +102,7 @@ public class SubscriptionDraw {
     public View onCreate(ViewPager drawPager, MainActivity activity, SubscriptionCallback callback) {
         this.activity = activity;
         this.callback = callback;
+        LocalUpdateService.addListener(this);
         @SuppressLint("InflateParams")
         View subscriptionView = inflater.inflate(R.layout.subscription_draw, null, false);
 
@@ -108,29 +111,25 @@ public class SubscriptionDraw {
         textView = (TextView) ViewUtils.$$(subscriptionView, R.id.not_login_text);
         frameLayout.setVisibility(View.GONE);
 
-        Toolbar toolbar = (Toolbar) ViewUtils.$$(subscriptionView, R.id.toolbar);
+        toolbar = (Toolbar) ViewUtils.$$(subscriptionView, R.id.toolbar);
         final TextView tip = (TextView) ViewUtils.$$(subscriptionView, R.id.tip);
         listView = (ListView) ViewUtils.$$(subscriptionView, R.id.list_view);
         AssertUtils.assertNotNull(context);
 
-        tip.setText(R.string.subscription_tip);
+        tip.setText(R.string.local_follow_empty);
         toolbar.setLogo(R.drawable.ic_baseline_subscriptions_24);
-        toolbar.setTitle(R.string.subscription);
+        toolbar.setTitle(R.string.local_follow);
         toolbar.inflateMenu(R.menu.drawer_gallery_list);
-        MenuItem refreshItem = toolbar.getMenu().findItem(R.id.action_refresh);
-        View refreshAction = inflater.inflate(R.layout.action_subscription_refresh, toolbar, false);
-        refreshStatusView = refreshAction.findViewById(R.id.subscription_refresh_status);
-        refreshAction.setOnClickListener(view -> callback.onSubscriptionRefresh());
-        refreshItem.setActionView(refreshAction);
+        toolbar.getMenu().findItem(R.id.action_add).setVisible(false);
+        updateToolbar = new LocalUpdateToolbarController(context, inflater, toolbar,
+                LocalRefreshJobStore.TYPE_FOLLOW, callback::onSubscriptionRefresh,
+                this::showRefreshDetails);
         restoreRefreshStatus();
         toolbar.setOnMenuItemClickListener(item -> {  //点击增加快速搜索按钮触发
             int id = item.getItemId();
             switch (id) {
                 case R.id.action_refresh:
                     callback.onSubscriptionRefresh();
-                    break;
-                case R.id.action_add:
-                    addNewTag();
                     break;
                 case R.id.action_settings:
                     seeDetailPage();
@@ -139,96 +138,65 @@ public class SubscriptionDraw {
             return true;
         });
 
-        toolbar.setOnClickListener(l -> drawPager.setCurrentItem(0));
-
-        if (needLoad) {
-            try {
-                loadData();
-            } catch (EhException e) {
-                e.printStackTrace();
+        toolbar.setOnClickListener(l -> {
+            if (LocalUpdateTaskDialog.isOpenTask(LocalRefreshJobStore.read())) {
+                showRefreshDetails();
+            } else {
+                drawPager.setCurrentItem(0);
             }
-        }
+        });
+
+        if (needLoad) loadLocalData();
 
         return subscriptionView;
     }
 
     public void showRefreshProgress(SubscriptionScanProgress progress) {
-        if (refreshStatusView == null) return;
-        refreshStatusView.setVisibility(View.VISIBLE);
-        if (progress.stage == SubscriptionScanProgress.Stage.SYNCING_TAGS) {
-            refreshStatusView.setText(R.string.subscription_refresh_syncing_tags);
-        } else {
-            refreshStatusView.setText(context.getString(
-                    R.string.subscription_refresh_scanned_pages, progress.pagesScanned));
-        }
+        if (updateToolbar != null) updateToolbar.render(LocalRefreshJobStore.read());
     }
 
     public void showRefreshSaving() {
-        if (refreshStatusView == null) return;
-        refreshStatusView.setVisibility(View.VISIBLE);
-        refreshStatusView.setText(R.string.subscription_refresh_saving);
+        if (toolbar != null) toolbar.setSubtitle(R.string.subscription_refresh_saving);
     }
 
     public void showRefreshResult(SubscriptionRefreshStatus.Result result, long time) {
         String account = SubscriptionRepository.getInstance().getAccountKey();
         SubscriptionRefreshStatus.save(account, result, time);
-        if (refreshStatusView == null) return;
-        String formatted = new SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
-                .format(new Date(time));
-        int stringId = result == SubscriptionRefreshStatus.Result.SUCCESS
-                ? R.string.subscription_refresh_last
-                : result == SubscriptionRefreshStatus.Result.FAILURE
-                ? R.string.subscription_refresh_failed
-                : R.string.subscription_refresh_cancelled;
-        refreshStatusView.setText(context.getString(stringId, formatted));
-        refreshStatusView.setVisibility(View.VISIBLE);
+        if (updateToolbar != null) updateToolbar.render(LocalRefreshJobStore.read());
     }
 
     private void restoreRefreshStatus() {
-        SubscriptionRefreshStatus status = SubscriptionRefreshStatus.read(
-                SubscriptionRepository.getInstance().getAccountKey());
-        if (status != null) showRefreshResult(status.result, status.time);
+        if (updateToolbar != null) updateToolbar.render(LocalRefreshJobStore.read());
+    }
+
+    public void showRefreshDetails() {
+        LocalRefreshJobStore.Snapshot snapshot = LocalRefreshJobStore.read();
+        if (snapshot == null) return;
+        LocalUpdateTaskDialog.show(context, snapshot, true);
     }
 
     public void setUserTagList(UserTagList tagList){
-        if (tagList == null) return;
-        if (this.userTagList == null){
-            this.userTagList = tagList;
-        }else {
-            this.userTagList.userTags = tagList.userTags;
-        }
-        EhApplication.saveUserTagList(context, this.userTagList);
-        SubscriptionSnapshot.replace(this.userTagList);
-        if (adapter != null) {
-            adapter.notifyDataSetChanged();
-            loadFollowCounts();
-        }
+        loadLocalData();
 
     }
 
     private void seeDetailPage() {
-        if (!isLogin()) {
-            Toast.makeText(context, R.string.settings_eh_identity_cookies_tourist, Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (userTagList == null) {
-            Toast.makeText(context, R.string.empty_subscription, Toast.LENGTH_SHORT).show();
-            return;
-        }
-        userTagList.stageId = activity.getStageId();
-        EhApplication.saveUserTagList(context, userTagList);
-        activity.startScene(new Announcer(SubscriptionsScene.class));
+        activity.startScene(new Announcer(LocalFollowScene.class));
     }
 
     private void bindViewSecond() {
+        bindViewSecond(true);
+    }
+
+    private void bindViewSecond(boolean sort) {
         progressView.setVisibility(View.GONE);
         frameLayout.setVisibility(View.VISIBLE);
         if (userTagList.userTags.isEmpty()) {
-            if (isLogin()) {
-                textView.setVisibility(View.VISIBLE);
-            }
+            textView.setText(R.string.local_follow_empty);
+            textView.setVisibility(View.VISIBLE);
             return;
         }
+        textView.setVisibility(View.GONE);
 //        List<String> name = new ArrayList<>();
 //
 //        for (UserTag userTag : userTagList.userTags) {
@@ -246,33 +214,86 @@ public class SubscriptionDraw {
         if (userTagList.size()>0){
             resume();
         }
-        loadFollowCounts();
+        loadFollowCounts(sort);
     }
 
-    private void loadFollowCounts() {
+    private void loadFollowCounts(boolean sort) {
         UserTagList snapshot = userTagList;
-        SubscriptionSnapshot.replace(snapshot);
+        if (snapshot == null) return;
         SubscriptionRepository repository = SubscriptionRepository.getInstance();
         repository.execute(() -> {
-            String account = repository.getAccountKey();
-            repository.replaceTagSnapshot(account, snapshot.userTags);
-            SearchQueryPolicy.Result query = SearchQueryPolicy.resolve("",
-                    com.hippo.ehviewer.client.data.ListUrlBuilder.MODE_SUBSCRIPTION,
-                    getAutoAppendChinese());
-            Map<String, TagUpdateState> counts = repository.readTagCounts(account,
-                    QuerySignatureFactory.create(query.effectiveQuery, query.chineseActuallyApplied));
+            LocalFollowRepository local = LocalFollowRepository.getInstance();
             for (UserTag tag : snapshot.userTags) {
-                TagUpdateState state = counts.get(SubscriptionRepository.normalizeTagName(tag.tagName));
-                tag.followCount = state == null ? null : state.displayCount();
+                TagUpdateState state = local.readState(LocalFollowRepository.SOURCE_FOLLOW,
+                        tag.tagName, LocalFollowRepository.FIXED_CHINESE_SIGNATURE);
+                tag.followCount = state.checkedAt == 0 ? null : state.displayCount();
             }
+            if (sort) snapshot.userTags.sort((left, right) -> {
+                TagUpdateState a = local.readState(LocalFollowRepository.SOURCE_FOLLOW,
+                        left.tagName, LocalFollowRepository.FIXED_CHINESE_SIGNATURE);
+                TagUpdateState b = local.readState(LocalFollowRepository.SOURCE_FOLLOW,
+                        right.tagName, LocalFollowRepository.FIXED_CHINESE_SIGNATURE);
+                int aRank = a.state == TagUpdateState.State.LOWER_BOUND
+                        ? TagUpdateState.DISPLAY_CAP + 1 : a.count;
+                int bRank = b.state == TagUpdateState.State.LOWER_BOUND
+                        ? TagUpdateState.DISPLAY_CAP + 1 : b.count;
+                int count = Integer.compare(bRank, aRank);
+                if (count != 0) return count;
+                int checked = Long.compare(b.checkedAt, a.checkedAt);
+                return checked != 0 ? checked : left.tagName.compareTo(right.tagName);
+            });
             if (activity != null) activity.runOnUiThread(() -> {
                 if (adapter != null) adapter.notifyDataSetChanged();
             });
         });
     }
 
+    private void loadLocalData() {
+        loadLocalData(true);
+    }
+
+    private void loadLocalData(boolean sort) {
+        SubscriptionRepository.getInstance().execute(() -> {
+            UserTagList localList = new UserTagList();
+            int index = 1;
+            for (String name : LocalFollowRepository.getInstance().getAll()) {
+                UserTag tag = new UserTag();
+                tag.userTagId = "usertag_" + index++;
+                tag.tagName = name;
+                tag.watched = true;
+                tag.hidden = false;
+                localList.userTags.add(tag);
+            }
+            userTagList = localList;
+            SubscriptionSnapshot.refreshFromDatabase();
+            if (activity != null) activity.runOnUiThread(() -> bindViewSecond(sort));
+        });
+    }
+
+    @Override
+    public void onLocalUpdateProgress(LocalRefreshJobStore.Snapshot snapshot) {
+        if (listView == null) return;
+        listView.post(() -> {
+            if (updateToolbar != null) updateToolbar.render(snapshot);
+            boolean terminal = snapshot != null
+                    && !LocalRefreshJobStore.STATUS_RUNNING.equals(snapshot.status)
+                    && !LocalRefreshJobStore.STATUS_PAUSED.equals(snapshot.status);
+            if (terminal) {
+                if (LocalRefreshJobStore.TYPE_FOLLOW.equals(snapshot.type)) {
+                    loadLocalData(true);
+                } else if (LocalRefreshJobStore.TYPE_BASELINE.equals(snapshot.type)) {
+                    loadLocalData(false);
+                }
+            }
+        });
+    }
+
     public void refreshFollowCounts() {
-        if (userTagList != null) loadFollowCounts();
+        refreshFollowCounts(true);
+    }
+
+    public void refreshFollowCounts(boolean sort) {
+        if (userTagList != null) loadFollowCounts(sort);
     }
 
     private void addNewTag() {

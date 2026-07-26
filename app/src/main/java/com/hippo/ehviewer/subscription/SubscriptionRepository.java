@@ -88,10 +88,32 @@ public final class SubscriptionRepository {
                 "SELECT PREVIOUS_TIME,\"CURRENT_TIME\",PREVIOUS_GIDS,CURRENT_GIDS,UPDATED_AT " +
                         "FROM FEED_CHECKPOINT WHERE ACCOUNT_KEY=? AND SOURCE_TYPE=? AND SOURCE_KEY=? AND QUERY_SIGNATURE=?",
                 args(key))) {
-            if (!cursor.moveToFirst()) return new FeedCheckpoint(FeedBoundary.EMPTY, FeedBoundary.EMPTY, 0);
-            return new FeedCheckpoint(new FeedBoundary(cursor.getLong(0), parseGids(cursor.getString(2))),
-                    new FeedBoundary(cursor.getLong(1), parseGids(cursor.getString(3))), cursor.getLong(4));
+            return readCheckpoint(cursor);
         }
+    }
+
+    /**
+     * Returns the latest successfully committed cursor for a shared local source, regardless of
+     * the account/site context that performed the check.
+     */
+    public FeedCheckpoint readLatestCheckpoint(String sourceType, String sourceKey) {
+        try (Cursor cursor = EhDB.getDatabase().rawQuery(
+                "SELECT PREVIOUS_TIME,\"CURRENT_TIME\",PREVIOUS_GIDS,CURRENT_GIDS,UPDATED_AT " +
+                        "FROM FEED_CHECKPOINT WHERE SOURCE_TYPE=? AND SOURCE_KEY=? " +
+                        "ORDER BY UPDATED_AT DESC LIMIT 1",
+                new String[]{sourceType, sourceKey})) {
+            return readCheckpoint(cursor);
+        }
+    }
+
+    private static FeedCheckpoint readCheckpoint(Cursor cursor) {
+        if (!cursor.moveToFirst()) {
+            return new FeedCheckpoint(FeedBoundary.EMPTY, FeedBoundary.EMPTY, 0);
+        }
+        return new FeedCheckpoint(
+                new FeedBoundary(cursor.getLong(0), parseGids(cursor.getString(2))),
+                new FeedBoundary(cursor.getLong(1), parseGids(cursor.getString(3))),
+                cursor.getLong(4));
     }
 
     public void advanceCheckpoint(CheckpointKey key, FeedBoundary boundary) {
@@ -99,6 +121,14 @@ public final class SubscriptionRepository {
         Database db = EhDB.getDatabase();
         FeedCheckpoint old = readCheckpoint(key);
         upsertCheckpoint(db, key, old.current, boundary);
+    }
+
+    /** Refines an initial/provisional baseline without manufacturing a previous sync boundary. */
+    public void establishCheckpoint(CheckpointKey key, FeedBoundary boundary) {
+        if (boundary == null || boundary.time == 0) return;
+        Database db = EhDB.getDatabase();
+        FeedCheckpoint old = readCheckpoint(key);
+        upsertCheckpoint(db, key, old.previous, boundary);
     }
 
     private static void upsertCheckpoint(Database db, CheckpointKey key,

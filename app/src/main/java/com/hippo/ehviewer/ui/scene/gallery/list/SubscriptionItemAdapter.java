@@ -6,7 +6,6 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
-import android.widget.ImageView;
 import android.widget.TextView;
 
 import com.hippo.ehviewer.R;
@@ -14,6 +13,7 @@ import com.hippo.ehviewer.Settings;
 import com.hippo.ehviewer.client.EhTagDatabase;
 import com.hippo.ehviewer.client.data.userTag.UserTag;
 import com.hippo.ehviewer.client.data.userTag.UserTagList;
+import com.hippo.ehviewer.subscription.UpdateBadgeFormatter;
 
 public class SubscriptionItemAdapter extends BaseAdapter {
 
@@ -55,19 +55,11 @@ public class SubscriptionItemAdapter extends BaseAdapter {
         UserTag userTag = getItem(position);
 
         View view = inflater.inflate(R.layout.subscripition_list_item,null);
-        ImageView imageView = view.findViewById(R.id.subscription_state);
-        if (userTag.hidden){
-            imageView.setImageResource(R.drawable.ic_baseline_visibility_off_24);
-        }
-        if (userTag.watched){
-            imageView.setImageResource(R.drawable.ic_baseline_visibility_24);
-        }
-
         TextView textView = view.findViewById(R.id.label);
 
         String name = userTag.getName(ehTags);
-        textView.setText(userTag.hidden || userTag.followCount == null
-                ? name : name + "  ·  " + userTag.followCount);
+        textView.setText(UpdateBadgeFormatter.format(
+                textView.getContext(), name, userTag.followCount));
 
 
         return view;

@@ -250,6 +250,12 @@
             android:foregroundServiceType="dataSync"
             android:label="@string/download_service_label" />
 
+        <service
+            android:name=".subscription.LocalUpdateService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"
+            android:stopWithTask="false" />
+
         <provider
             android:name="com.hippo.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

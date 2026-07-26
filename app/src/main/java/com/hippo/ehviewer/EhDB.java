@@ -56,6 +56,8 @@ import com.hippo.ehviewer.dao.QuickSearch;
 import com.hippo.ehviewer.dao.QuickSearchDao;
 import com.hippo.ehviewer.download.DownloadManager;
 import com.hippo.ehviewer.subscription.SubscriptionSchema;
+import com.hippo.ehviewer.subscription.LocalFollowRepository;
+import com.hippo.ehviewer.subscription.LocalUpdateService;
 import com.hippo.util.ExceptionUtils;
 import com.hippo.util.SqlUtils;
 import com.hippo.lib.yorozuya.IOUtils;
@@ -176,6 +178,10 @@ public class EhDB {
                     Analytics.recordException(e);
                 }
             case 7: // 7 to 8, additive follow-update tables
+                SubscriptionSchema.createTables(db);
+            case 8: // 8 to 9, local follows, capped unread state and resumable jobs
+                SubscriptionSchema.createTables(db);
+            case 9: // 9 to 10, durable automatic-baseline queue
                 SubscriptionSchema.createTables(db);
         }
     }
@@ -739,44 +745,72 @@ public class EhDB {
 
     public static synchronized void insertQuickSearch(QuickSearch quickSearch) {
         QuickSearchDao dao = sDaoSession.getQuickSearchDao();
-        quickSearch.id = null;
-        if (quickSearch.time==0L){
-            quickSearch.time = System.currentTimeMillis();
+        org.greenrobot.greendao.database.Database db = sDaoSession.getDatabase();
+        db.beginTransaction();
+        try {
+            quickSearch.id = null;
+            if (quickSearch.time==0L){
+                quickSearch.time = System.currentTimeMillis();
+            }
+            quickSearch.id = dao.insert(quickSearch);
+            LocalFollowRepository.getInstance().initializeBookmark(
+                    quickSearch, System.currentTimeMillis());
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
         }
-        quickSearch.id = dao.insert(quickSearch);
     }
 
     public static synchronized void insertQuickSearchList(List<QuickSearch> quickSearchList) {
         QuickSearchDao dao = sDaoSession.getQuickSearchDao();
-        for (int i = 0; i < quickSearchList.size(); i++) {
-            QuickSearch search = quickSearchList.get(i);
-            search.id = null;
-            search.time = System.currentTimeMillis();
-            search.id = dao.insert(search);
+        org.greenrobot.greendao.database.Database db = sDaoSession.getDatabase();
+        db.beginTransaction();
+        try {
+            for (int i = 0; i < quickSearchList.size(); i++) {
+                QuickSearch search = quickSearchList.get(i);
+                search.id = null;
+                search.time = System.currentTimeMillis();
+                search.id = dao.insert(search);
+                LocalFollowRepository.getInstance().initializeBookmark(
+                        search, System.currentTimeMillis());
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
         }
     }
 
     public static synchronized void takeOverQuickSearchList(List<QuickSearch> quickSearchList) {
         QuickSearchDao dao = sDaoSession.getQuickSearchDao();
         List<QuickSearch> allList = dao.queryBuilder().orderAsc(QuickSearchDao.Properties.Time).list();
-        for (int i = 0; i < quickSearchList.size(); i++) {
-            QuickSearch newSearch = quickSearchList.get(i);
-            if (newSearch == null) {
-                continue;
-            }
-            boolean insert = true;
-            for (int j = 0; j < allList.size(); j++) {
-                QuickSearch exist = allList.get(j);
-                if (exist != null && Objects.equals(exist.keyword, newSearch.keyword)) {
-                    insert = false;
-                    break;
+        org.greenrobot.greendao.database.Database db = sDaoSession.getDatabase();
+        db.beginTransaction();
+        try {
+            for (int i = 0; i < quickSearchList.size(); i++) {
+                QuickSearch newSearch = quickSearchList.get(i);
+                if (newSearch == null) {
+                    continue;
+                }
+                boolean insert = true;
+                for (int j = 0; j < allList.size(); j++) {
+                    QuickSearch exist = allList.get(j);
+                    if (exist != null && Objects.equals(exist.keyword, newSearch.keyword)) {
+                        insert = false;
+                        break;
+                    }
+                }
+                if (insert) {
+                    newSearch.id = null;
+                    newSearch.time = System.currentTimeMillis();
+                    newSearch.id = dao.insert(newSearch);
+                    LocalFollowRepository.getInstance().initializeBookmark(
+                            newSearch, System.currentTimeMillis());
+                    allList.add(newSearch);
                 }
             }
-            if (insert) {
-                newSearch.id = null;
-                newSearch.time = System.currentTimeMillis();
-                newSearch.id = dao.insert(newSearch);
-            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
         }
     }
 
@@ -950,6 +984,7 @@ public class EhDB {
                     return false;
                 if (!copyDao(sDaoSession.getFilterDao(), exportSession.getFilterDao()))
                     return false;
+                copyLocalFollowTags(sDaoSession.getDatabase(), db);
             }
 
             // Copy export db to data dir
@@ -1070,6 +1105,9 @@ public class EhDB {
                 }
             }
 
+            mergeLocalFollowTags(db);
+            LocalUpdateService.startPendingBaselines(context);
+
             return null;
         } catch (Throwable e) {
             ExceptionUtils.throwIfFatal(e);
@@ -1085,5 +1123,54 @@ public class EhDB {
         bundle.putInt(LOADING_STATUS, DB_LOADING);
         message.setData(bundle);
         handler.sendMessage(message);
+    }
+
+    private static void copyLocalFollowTags(org.greenrobot.greendao.database.Database source,
+                                            SQLiteDatabase target) {
+        try (Cursor cursor = source.rawQuery(
+                "SELECT TAG_NAME,ADDED_AT FROM LOCAL_FOLLOW_TAG ORDER BY TAG_NAME", null)) {
+            while (cursor.moveToNext()) {
+                target.execSQL("INSERT OR IGNORE INTO LOCAL_FOLLOW_TAG(TAG_NAME,ADDED_AT,LAST_CHECKED_AT) " +
+                                "VALUES(?,?,0)",
+                        new Object[]{cursor.getString(0), cursor.getLong(1)});
+            }
+        }
+    }
+
+    private static void mergeLocalFollowTags(SQLiteDatabase source) {
+        if (!hasTable(source, "LOCAL_FOLLOW_TAG")) return;
+        org.greenrobot.greendao.database.Database target = sDaoSession.getDatabase();
+        java.util.Set<String> existing =
+                new java.util.LinkedHashSet<>(LocalFollowRepository.getInstance().getAll());
+        List<String> added = new ArrayList<>();
+        long now = System.currentTimeMillis();
+        target.beginTransaction();
+        try {
+            try (Cursor cursor = source.rawQuery(
+                    "SELECT TAG_NAME,ADDED_AT FROM LOCAL_FOLLOW_TAG ORDER BY TAG_NAME", null)) {
+                while (cursor.moveToNext()) {
+                    String tag = cursor.getString(0);
+                    if (existing.contains(tag)) continue;
+                    target.execSQL("INSERT OR IGNORE INTO LOCAL_FOLLOW_TAG(TAG_NAME,ADDED_AT,LAST_CHECKED_AT) " +
+                                    "VALUES(?,?,0)",
+                            new Object[]{tag, now});
+                    existing.add(tag);
+                    added.add(tag);
+                }
+            }
+            LocalFollowRepository.getInstance().initializeImportedFollowTags(added, now);
+            target.setTransactionSuccessful();
+        } finally {
+            target.endTransaction();
+        }
+        com.hippo.ehviewer.subscription.SubscriptionSnapshot.refreshFromDatabase();
+    }
+
+    private static boolean hasTable(SQLiteDatabase db, String table) {
+        try (Cursor cursor = db.rawQuery(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+                new String[]{table})) {
+            return cursor.moveToFirst();
+        }
     }
 }

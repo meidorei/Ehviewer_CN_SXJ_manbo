@@ -436,7 +436,7 @@ public class GalleryDetailScene extends BaseScene implements View.OnClickListene
 
         Context snapshotContext = getEHContext();
         if (snapshotContext != null && SubscriptionSnapshot.version() == 0) {
-            SubscriptionSnapshot.replace(EhApplication.getUserTagList(snapshotContext));
+            SubscriptionSnapshot.refreshFromDatabase();
         }
 
         if (savedInstanceState == null) {
@@ -1151,6 +1151,11 @@ public class GalleryDetailScene extends BaseScene implements View.OnClickListene
                 tag.setOnLongClickListener(this);
             }
         }
+    }
+
+    /** Rebind only the tag chips after a local follow is added or removed. */
+    public void refreshLocalFollowHighlights() {
+        if (mGalleryDetail != null) bindTags(mGalleryDetail.tags);
     }
 
     private void bindComments(GalleryComment[] comments) {

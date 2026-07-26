@@ -120,6 +120,17 @@
         app:allowDividerAbove="true" />
 
     <Preference
+        android:key="export_local_follows"
+        android:summary="@string/settings_advanced_export_local_follows_summary"
+        android:title="@string/settings_advanced_export_local_follows"
+        app:allowDividerAbove="true" />
+
+    <Preference
+        android:key="import_local_follows"
+        android:summary="@string/settings_advanced_import_local_follows_summary"
+        android:title="@string/settings_advanced_import_local_follows" />
+
+    <Preference
         android:key="wifi_server"
         android:summary="@string/settings_advanced_wifi_sander_summary"
         android:title="@string/settings_advanced_wifi_sender"

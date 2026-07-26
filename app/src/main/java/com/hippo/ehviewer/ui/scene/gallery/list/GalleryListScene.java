@@ -22,6 +22,8 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.Manifest;
+import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.content.res.Resources;
 import android.graphics.Color;
@@ -29,6 +31,7 @@ import android.graphics.Point;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
+import android.os.Build;
 import android.text.InputType;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
@@ -118,6 +121,9 @@ import com.hippo.ehviewer.subscription.SubscriptionScanResult;
 import com.hippo.ehviewer.subscription.SubscriptionRefreshStatus;
 import com.hippo.ehviewer.subscription.SubscriptionSnapshot;
 import com.hippo.ehviewer.subscription.SubscriptionUpdateCalculator;
+import com.hippo.ehviewer.subscription.LocalFollowRepository;
+import com.hippo.ehviewer.subscription.LocalRefreshJobStore;
+import com.hippo.ehviewer.subscription.LocalUpdateService;
 import com.hippo.ehviewer.util.TagTranslationUtil;
 import com.hippo.ehviewer.widget.GalleryInfoContentHelper;
 import com.hippo.ehviewer.widget.JumpDateSelector;
@@ -174,9 +180,7 @@ public final class GalleryListScene extends BaseScene
     private FeedSourceContext mFeedSourceContext;
     private FeedBoundary mVisibleFeedBoundary = FeedBoundary.EMPTY;
     private FeedBoundaryDecoration mFeedBoundaryDecoration;
-    private boolean mSeenCommittedForContext;
-    private boolean mRecordSeenOnLoad = true;
-    private long mFeedEnteredAt;
+    private boolean mUnreadClearedForContext;
 
     public final static int REQUEST_CODE_SELECT_IMAGE = 0;
 
@@ -195,9 +199,7 @@ public final class GalleryListScene extends BaseScene
     private static final String KEY_FEED_SIGNATURE = "feed_signature";
     private static final String KEY_FEED_TIME = "feed_time";
     private static final String KEY_FEED_GIDS = "feed_gids";
-    private static final String KEY_SEEN_COMMITTED = "seen_committed";
-    private static final String KEY_FEED_ENTERED_AT = "feed_entered_at";
-    private static final String KEY_RECORD_SEEN = "record_seen";
+    private static final String KEY_UNREAD_CLEARED = "unread_cleared";
 
     final static int STATE_NORMAL = 0;
     final static int STATE_SIMPLE_SEARCH = 1;
@@ -367,15 +369,14 @@ public final class GalleryListScene extends BaseScene
 
     private void setFeedSource(FeedSourceContext.Type type, String sourceKey, String originalQuery) {
         int mode = type == FeedSourceContext.Type.SUBSCRIPTION_AGGREGATE
-                || type == FeedSourceContext.Type.SUBSCRIPTION_TAG
-                ? ListUrlBuilder.MODE_SUBSCRIPTION : ListUrlBuilder.MODE_NORMAL;
+                ? ListUrlBuilder.MODE_SUBSCRIPTION
+                : type == FeedSourceContext.Type.SUBSCRIPTION_TAG
+                ? ListUrlBuilder.MODE_TAG : ListUrlBuilder.MODE_NORMAL;
         SearchQueryPolicy.Result query = SearchQueryPolicy.resolve(originalQuery, mode,
                 Settings.getAutoAppendChinese());
         mFeedSourceContext = new FeedSourceContext(type, sourceKey,
                 QuerySignatureFactory.create(query.effectiveQuery, query.chineseActuallyApplied));
-        mFeedEnteredAt = System.currentTimeMillis();
-        mSeenCommittedForContext = false;
-        mRecordSeenOnLoad = true;
+        mUnreadClearedForContext = false;
         mVisibleFeedBoundary = FeedBoundary.EMPTY;
         clearVisibleFeedMarker();
         loadFeedBoundary();
@@ -388,9 +389,7 @@ public final class GalleryListScene extends BaseScene
         mFeedSourceContext = new FeedSourceContext(FeedSourceContext.Type.QUICK_SEARCH,
                 Long.toString(search.getId()), QuerySignatureFactory.create(
                 query.effectiveQuery, query.chineseActuallyApplied));
-        mFeedEnteredAt = System.currentTimeMillis();
-        mSeenCommittedForContext = false;
-        mRecordSeenOnLoad = true;
+        mUnreadClearedForContext = false;
         mVisibleFeedBoundary = FeedBoundary.EMPTY;
         clearVisibleFeedMarker();
         loadFeedBoundary();
@@ -399,11 +398,6 @@ public final class GalleryListScene extends BaseScene
     private void clearVisibleFeedMarker() {
         if (mFeedBoundaryDecoration != null) mFeedBoundaryDecoration.setBoundary(FeedBoundary.EMPTY);
         if (mRecyclerView != null) mRecyclerView.invalidateItemDecorations();
-    }
-
-    private CheckpointKey seenCheckpointKey(FeedSourceContext context) {
-        SubscriptionRepository repository = SubscriptionRepository.getInstance();
-        return FeedCheckpointKeys.seen(repository.getAccountKey(), context);
     }
 
     private CheckpointKey syncCheckpointKey(FeedSourceContext context) {
@@ -416,12 +410,18 @@ public final class GalleryListScene extends BaseScene
         if (context == null || !context.showsMarker()) return;
         SubscriptionRepository repository = SubscriptionRepository.getInstance();
         repository.execute(() -> {
-            boolean subscriptionAggregate =
-                    context.type == FeedSourceContext.Type.SUBSCRIPTION_AGGREGATE;
-            FeedCheckpoint checkpoint = repository.readCheckpoint(subscriptionAggregate
-                    ? syncCheckpointKey(context) : seenCheckpointKey(context));
-            FeedBoundary boundary = subscriptionAggregate
-                    ? checkpoint.previous : checkpoint.current;
+            FeedCheckpoint checkpoint;
+            if (context.type == FeedSourceContext.Type.SUBSCRIPTION_AGGREGATE) {
+                checkpoint = repository.readCheckpoint(syncCheckpointKey(context));
+            } else if (context.type == FeedSourceContext.Type.SUBSCRIPTION_TAG) {
+                checkpoint = repository.readLatestCheckpoint(
+                        LocalFollowRepository.CHECKPOINT_FOLLOW,
+                        SubscriptionRepository.normalizeTagName(context.sourceKey));
+            } else {
+                checkpoint = repository.readLatestCheckpoint(
+                        LocalFollowRepository.CHECKPOINT_BOOKMARK, context.sourceKey);
+            }
+            FeedBoundary boundary = checkpoint.previous;
             if (mFeedSourceContext != context) return;
             mVisibleFeedBoundary = boundary;
             if (mRecyclerView != null) mRecyclerView.post(() -> {
@@ -546,10 +546,8 @@ public final class GalleryListScene extends BaseScene
                     savedInstanceState.getString(KEY_FEED_SIGNATURE, ""));
             mVisibleFeedBoundary = new FeedBoundary(savedInstanceState.getLong(KEY_FEED_TIME),
                     SubscriptionRepository.parseGids(savedInstanceState.getString(KEY_FEED_GIDS, "")));
-            mSeenCommittedForContext = savedInstanceState.getBoolean(KEY_SEEN_COMMITTED, false);
-            mFeedEnteredAt = savedInstanceState.getLong(KEY_FEED_ENTERED_AT,
-                    System.currentTimeMillis());
-            mRecordSeenOnLoad = savedInstanceState.getBoolean(KEY_RECORD_SEEN, true);
+            mUnreadClearedForContext =
+                    savedInstanceState.getBoolean(KEY_UNREAD_CLEARED, false);
         }
     }
 
@@ -573,9 +571,7 @@ public final class GalleryListScene extends BaseScene
             outState.putLong(KEY_FEED_TIME, mVisibleFeedBoundary.time);
             outState.putString(KEY_FEED_GIDS,
                     SubscriptionRepository.serializeGids(mVisibleFeedBoundary.gids));
-            outState.putBoolean(KEY_SEEN_COMMITTED, mSeenCommittedForContext);
-            outState.putLong(KEY_FEED_ENTERED_AT, mFeedEnteredAt);
-            outState.putBoolean(KEY_RECORD_SEEN, mRecordSeenOnLoad);
+            outState.putBoolean(KEY_UNREAD_CLEARED, mUnreadClearedForContext);
         }
     }
 
@@ -1187,8 +1183,12 @@ public final class GalleryListScene extends BaseScene
                 quickSearch.name = text;
             }
             EhDB.insertQuickSearch(quickSearch);
+            LocalUpdateService.startPendingBaselines(context);
             list.add(quickSearch);
             adapter.notifyDataSetChanged();
+            if (mBookmarksDraw != null) {
+                mBookmarksDraw.refreshUpdateBadges(false);
+            }
 
             if (0 == list.size()) {
                 tip.setVisibility(View.VISIBLE);
@@ -1267,65 +1267,33 @@ public final class GalleryListScene extends BaseScene
 
     @Override
     public void onSubscriptionRefresh() {
-        if (mUrlBuilder == null || mHelper == null) return;
-        setFeedSource(FeedSourceContext.Type.SUBSCRIPTION_AGGREGATE, "watched", "");
-        // A manual sync displays refreshed data but must never advance a seen boundary.
-        mRecordSeenOnLoad = false;
-        SubscriptionRepository repository = SubscriptionRepository.getInstance();
-        FeedSourceContext context = mFeedSourceContext;
-        repository.execute(() -> {
-            CheckpointKey key = syncCheckpointKey(context);
-            FeedCheckpoint checkpoint = repository.readCheckpoint(key);
-            if (checkpoint.updatedAt > 0
-                    && System.currentTimeMillis() - checkpoint.updatedAt < 60_000L) {
-                MainActivity cooldownActivity = getActivity2();
-                if (cooldownActivity != null) cooldownActivity.runOnUiThread(() ->
-                        showTip(R.string.subscription_refresh_cooldown, LENGTH_SHORT));
-                return;
+        Context context = getEHContext();
+        MainActivity activity = getActivity2();
+        if (context == null || activity == null) return;
+        LocalRefreshJobStore.Snapshot currentJob = LocalRefreshJobStore.read();
+        if (LocalUpdateService.isActive()
+                || LocalUpdateTaskDialog.isOpenTask(currentJob)) {
+            if (mSubscriptionDraw != null) mSubscriptionDraw.showRefreshDetails();
+            return;
+        }
+        long last = LocalRefreshJobStore.lastFollowSuccess();
+        boolean recommendGlobal = last == 0
+                || System.currentTimeMillis() - last <= 5L * 24L * 60L * 60L * 1000L;
+        LocalUpdateStartDialog.showFollow(context, recommendGlobal, last, method -> {
+            if (Build.VERSION.SDK_INT >= 33
+                    && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                activity.requestPermissions(
+                        new String[]{Manifest.permission.POST_NOTIFICATIONS}, 8042);
             }
-            ListUrlBuilder requestBuilder = new ListUrlBuilder();
-            requestBuilder.setMode(ListUrlBuilder.MODE_SUBSCRIPTION);
-            String watchedUrl = requestBuilder.build(Settings.getAutoAppendChinese());
-            MainActivity activity = getActivity2();
-            Context callbackContext = getEHContext();
-            if (activity == null || callbackContext == null || mFeedSourceContext != context) return;
-            activity.runOnUiThread(() -> {
-                if (mSubscriptionDraw != null) {
-                    mSubscriptionDraw.showRefreshProgress(SubscriptionScanProgress.syncingTags());
-                }
-                EhRequest request = new EhRequest().setMethod(EhClient.METHOD_SCAN_SUBSCRIPTIONS)
-                        .setArgs(watchedUrl, EhUrl.getMyTag(), checkpoint.current.time,
-                                SubscriptionRepository.serializeGids(checkpoint.current.gids))
-                        .setCallback(new EhClient.ProgressCallback<SubscriptionScanResult>() {
-                            @Override public void onProgress(SubscriptionScanProgress progress) {
-                                if (mSubscriptionDraw != null) {
-                                    mSubscriptionDraw.showRefreshProgress(progress);
-                                }
-                            }
-
-                            @Override public void onSuccess(SubscriptionScanResult result) {
-                                finishSubscriptionScan(context, key, checkpoint, result);
-                            }
-
-                            @Override public void onFailure(Exception e) {
-                                Log.e(TAG, "Subscription refresh request failed", e);
-                                SubscriptionRefreshStatus.saveError(
-                                        e.getClass().getSimpleName() + ": " + e.getMessage());
-                                if (mSubscriptionDraw != null) mSubscriptionDraw.showRefreshResult(
-                                        SubscriptionRefreshStatus.Result.FAILURE,
-                                        System.currentTimeMillis());
-                                showTip(e.getMessage(), LENGTH_LONG);
-                            }
-
-                            @Override public void onCancel() {
-                                if (mSubscriptionDraw != null) mSubscriptionDraw.showRefreshResult(
-                                        SubscriptionRefreshStatus.Result.CANCELLED,
-                                        System.currentTimeMillis());
-                            }
-                        });
-                mClient.execute(request);
-            });
+            startLocalFollowUpdate(context, method);
         });
+    }
+
+    private void startLocalFollowUpdate(Context context, String method) {
+        if (!LocalUpdateService.startFollow(context, method)) {
+            if (mSubscriptionDraw != null) mSubscriptionDraw.showRefreshDetails();
+        }
     }
 
     private void finishSubscriptionScan(FeedSourceContext context, CheckpointKey key,
@@ -2265,38 +2233,30 @@ public final class GalleryListScene extends BaseScene
 
     private void handleSuccessfulFeed(GalleryListParser.Result result) {
         FeedSourceContext context = mFeedSourceContext;
-        if (context == null || !context.showsMarker() || mUrlBuilder == null
+        if (context == null || mUrlBuilder == null
                 || mUrlBuilder.getPageIndex() != 0 || result.galleryInfoList.isEmpty()
-                || mSeenCommittedForContext || !mRecordSeenOnLoad) return;
-        long newest = 0;
-        long previousTime = Long.MAX_VALUE;
-        Set<Long> gids = new LinkedHashSet<>();
-        for (GalleryInfo gallery : result.galleryInfoList) {
-            long time = gallery.postedTimestamp;
-            if (time <= 0 || time > previousTime) return; // Invalid or not posted-time descending.
-            previousTime = time;
-            if (time > newest) {
-                newest = time;
-                gids.clear();
-                gids.add(gallery.gid);
-            } else if (time == newest) {
-                gids.add(gallery.gid);
-            }
-        }
-        if (newest == 0 || mFeedSourceContext != context) return;
-        FeedBoundary next = new FeedBoundary(newest, gids);
-        CheckpointKey seenKey = seenCheckpointKey(context);
-        String seenTag = context.type == FeedSourceContext.Type.SUBSCRIPTION_TAG
-                ? context.sourceKey : "";
-        long enteredAt = mFeedEnteredAt;
-        mSeenCommittedForContext = true;
+                || mUnreadClearedForContext
+                || (context.type != FeedSourceContext.Type.SUBSCRIPTION_TAG
+                && context.type != FeedSourceContext.Type.QUICK_SEARCH)) return;
+        mUnreadClearedForContext = true;
         SubscriptionRepository.getInstance().execute(() -> {
-            SubscriptionRepository.getInstance().commitSeenBoundary(
-                    seenKey, next, seenTag, enteredAt);
+            if (context.type == FeedSourceContext.Type.SUBSCRIPTION_TAG) {
+                LocalFollowRepository.getInstance().clearState(
+                        LocalFollowRepository.SOURCE_FOLLOW,
+                        context.sourceKey);
+            } else if (context.type == FeedSourceContext.Type.QUICK_SEARCH) {
+                LocalFollowRepository.getInstance().clearState(
+                        LocalFollowRepository.SOURCE_BOOKMARK,
+                        context.sourceKey);
+            }
             MainActivity activity = getActivity2();
             if (activity != null) {
                 activity.runOnUiThread(() -> {
-                    if (mSubscriptionDraw != null) mSubscriptionDraw.refreshFollowCounts();
+                    if (mSubscriptionDraw != null) mSubscriptionDraw.refreshFollowCounts(false);
+                    if (context.type == FeedSourceContext.Type.QUICK_SEARCH
+                            && mBookmarksDraw != null) {
+                        mBookmarksDraw.refreshUpdateBadges(false);
+                    }
                 });
             }
         });

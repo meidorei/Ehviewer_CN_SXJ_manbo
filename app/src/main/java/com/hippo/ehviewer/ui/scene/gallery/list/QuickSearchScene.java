@@ -43,6 +43,7 @@ import com.hippo.ehviewer.R;
 import com.hippo.ehviewer.dao.QuickSearch;
 import com.hippo.ehviewer.ui.scene.ToolbarScene;
 import com.hippo.ehviewer.subscription.SubscriptionRepository;
+import com.hippo.ehviewer.subscription.LocalFollowRepository;
 import com.hippo.util.DrawableManager;
 import com.hippo.view.ViewTransition;
 import com.hippo.lib.yorozuya.AssertUtils;
@@ -194,6 +195,8 @@ public final class QuickSearchScene extends ToolbarScene {
                             SubscriptionRepository repository = SubscriptionRepository.getInstance();
                             repository.execute(() -> repository.deleteQuickSearchCheckpoints(
                                     repository.getAccountKey(), quickSearch.getId()));
+                            repository.execute(() -> LocalFollowRepository.getInstance()
+                                    .deleteBookmarkState(quickSearch.getId()));
                             mQuickSearchList.remove(position);
                         }
                     })

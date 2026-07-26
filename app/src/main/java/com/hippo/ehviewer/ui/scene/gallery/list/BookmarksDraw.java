@@ -2,6 +2,10 @@ package com.hippo.ehviewer.ui.scene.gallery.list;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.Manifest;
+import android.app.Activity;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -26,6 +30,13 @@ import com.hippo.ehviewer.subscription.FeedCheckpoint;
 import com.hippo.ehviewer.subscription.QuerySignatureFactory;
 import com.hippo.ehviewer.subscription.SearchQueryPolicy;
 import com.hippo.ehviewer.subscription.SubscriptionRepository;
+import com.hippo.ehviewer.subscription.LocalFollowRepository;
+import com.hippo.ehviewer.subscription.LocalRefreshJobStore;
+import com.hippo.ehviewer.subscription.LocalUpdateService;
+import com.hippo.ehviewer.subscription.BookmarkUpdatePolicy;
+import com.hippo.ehviewer.subscription.TagUpdateState;
+import com.hippo.ehviewer.subscription.UpdateBadgeFormatter;
+import androidx.appcompat.app.AlertDialog;
 import com.hippo.scene.Announcer;
 import com.hippo.lib.yorozuya.AssertUtils;
 import com.hippo.lib.yorozuya.ViewUtils;
@@ -33,6 +44,8 @@ import com.hippo.lib.yorozuya.ViewUtils;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.Comparator;
 
 public class BookmarksDraw {
 
@@ -47,6 +60,13 @@ public class BookmarksDraw {
     final private EhApplication ehApplication;
 
     private ListView listView;
+    private Toolbar toolbar;
+    private LocalUpdateToolbarController updateToolbar;
+    private List<QuickSearch> bookmarks;
+    private final Map<Long, String> updates = new HashMap<>();
+    private final Map<Long, Integer> originalOrder = new HashMap<>();
+    private ArrayAdapter<QuickSearch> adapter;
+    private final LocalUpdateService.Listener updateListener = this::onLocalUpdateProgress;
 
     public BookmarksDraw(@NonNull Context context, LayoutInflater inflater, EhTagDatabase ehTags) {
         this.context = context;
@@ -62,7 +82,7 @@ public class BookmarksDraw {
     public View onCreate(GalleryListScene scene) {
         View bookmarksView = inflater.inflate(R.layout.bookmarks_draw, null, false);
 
-        Toolbar toolbar = (Toolbar) ViewUtils.$$(bookmarksView, R.id.toolbar);
+        toolbar = (Toolbar) ViewUtils.$$(bookmarksView, R.id.toolbar);
         final TextView tip = (TextView) ViewUtils.$$(bookmarksView, R.id.tip);
         listView = (ListView) ViewUtils.$$(bookmarksView, R.id.list_view);
 
@@ -93,33 +113,57 @@ public class BookmarksDraw {
         }
 
 
-        final List<QuickSearch> list = quickSearchList;
-
-        final Map<Long, Boolean> updates = new HashMap<>();
-        final ArrayAdapter<QuickSearch> adapter = new ArrayAdapter<QuickSearch>(context, R.layout.item_simple_list, list) {
+        bookmarks = quickSearchList;
+        updates.clear();
+        originalOrder.clear();
+        for (int i = 0; i < bookmarks.size(); i++) {
+            originalOrder.put(bookmarks.get(i).getId(), i);
+        }
+        adapter = new ArrayAdapter<QuickSearch>(
+                context, R.layout.item_simple_list, bookmarks) {
             @Override public View getView(int position, View convertView, ViewGroup parent) {
                 TextView view = (TextView) super.getView(position, convertView, parent);
                 QuickSearch item = getItem(position);
-                boolean hasUpdate = item != null && Boolean.TRUE.equals(updates.get(item.getId()));
-                view.setText(item == null ? "" : item.name + (hasUpdate ? "  ·  NEW" : ""));
+                String badge = item == null ? null : updates.get(item.getId());
+                view.setText(item == null ? ""
+                        : UpdateBadgeFormatter.format(context, item.name, badge));
                 return view;
             }
         };
         listView.setAdapter(adapter);
-        loadUpdateBadges(list, updates, adapter);
+        loadUpdateBadges();
         //快速搜索点击tag事件监听
         listView.setOnItemClickListener((parent, view1, position, id) -> {
             if (null == scene.mHelper || null == scene.mUrlBuilder) {
                 return;
             }
 
-            scene.setQuickSearchFeedSource(list.get(position));
-            scene.mUrlBuilder.set(list.get(position));
+            scene.setQuickSearchFeedSource(bookmarks.get(position));
+            scene.mUrlBuilder.set(bookmarks.get(position));
             scene.mUrlBuilder.setPageIndex(0);
             scene.onUpdateUrlBuilder();
             scene.mHelper.refresh();
             scene.setState(GalleryListScene.STATE_NORMAL);
             scene.closeDrawer(Gravity.RIGHT);
+        });
+        listView.setOnItemLongClickListener((parent, view1, position, id) -> {
+            QuickSearch search = bookmarks.get(position);
+            new AlertDialog.Builder(context)
+                    .setTitle(search.name)
+                    .setItems(new String[]{context.getString(R.string.bookmark_check_this)},
+                            (dialog, which) -> {
+                                if (LocalUpdateTaskDialog.isOpenTask(
+                                        LocalRefreshJobStore.read())) {
+                                    showJobDetails();
+                                    return;
+                                }
+                                requestNotificationPermission();
+                                if (!LocalUpdateService.startBookmark(context, search.getId())) {
+                                    showJobDetails();
+                                }
+                            })
+                    .show();
+            return true;
         });
         listView.setOnScrollListener(new ScrollListener());
 
@@ -127,18 +171,22 @@ public class BookmarksDraw {
         toolbar.setLogo(R.drawable.ic_baseline_bookmarks_24);
         toolbar.setTitle(R.string.quick_search);
         toolbar.inflateMenu(R.menu.drawer_gallery_list);
+        updateToolbar = new LocalUpdateToolbarController(context, inflater, toolbar,
+                LocalRefreshJobStore.TYPE_BOOKMARK, this::requestBookmarkRefresh,
+                this::showJobDetails);
+        LocalUpdateService.addListener(updateListener);
+        onLocalUpdateProgress(LocalRefreshJobStore.read());
         toolbar.setOnMenuItemClickListener(item -> {  //点击增加快速搜索按钮触发
             int id = item.getItemId();
             switch (id) {
                 case R.id.action_refresh:
-                    if (scene.mHelper != null) scene.mHelper.refresh();
-                    scene.closeDrawer(Gravity.RIGHT);
+                    requestBookmarkRefresh();
                     break;
                 case R.id.action_add:
                     if (Settings.getQuickSearchTip()) {
-                        scene.showQuickSearchTipDialog(list, adapter, listView, tip);
+                        scene.showQuickSearchTipDialog(bookmarks, adapter, listView, tip);
                     } else {
-                        scene.showAddQuickSearchDialog(list, adapter, listView, tip);
+                        scene.showAddQuickSearchDialog(bookmarks, adapter, listView, tip);
                     }
                     break;
                 case R.id.action_settings:
@@ -148,7 +196,7 @@ public class BookmarksDraw {
             return true;
         });
 
-        if (list.isEmpty()) {
+        if (bookmarks.isEmpty()) {
             tip.setVisibility(View.VISIBLE);
             listView.setVisibility(View.GONE);
         } else {
@@ -158,33 +206,115 @@ public class BookmarksDraw {
         }
 
         toolbar.setOnClickListener(l -> {
-            scene.drawPager.setCurrentItem(1);
+            if (LocalUpdateTaskDialog.isOpenTask(LocalRefreshJobStore.read())) {
+                showJobDetails();
+            } else {
+                scene.drawPager.setCurrentItem(1);
+            }
+        });
+        toolbar.setOnLongClickListener(view -> {
+            showJobDetails();
+            return true;
         });
 
 
         return bookmarksView;
     }
 
-    private void loadUpdateBadges(List<QuickSearch> list, Map<Long, Boolean> updates,
-                                  ArrayAdapter<QuickSearch> adapter) {
+    private void loadUpdateBadges() {
+        loadUpdateBadges(true);
+    }
+
+    private void loadUpdateBadges(boolean sort) {
+        if (bookmarks == null || adapter == null) return;
         SubscriptionRepository repository = SubscriptionRepository.getInstance();
         repository.execute(() -> {
-            String account = repository.getAccountKey();
-            for (QuickSearch item : list) {
+            LocalFollowRepository local = LocalFollowRepository.getInstance();
+            for (QuickSearch item : bookmarks) {
                 if (item.getId() == null) continue;
-                SearchQueryPolicy.Result query = SearchQueryPolicy.resolve(item.keyword, item.mode,
-                        Settings.getAutoAppendChinese());
-                String signature = QuerySignatureFactory.create(query.effectiveQuery,
-                        query.chineseActuallyApplied);
-                FeedCheckpoint checkpoint = repository.readCheckpoint(new CheckpointKey(account,
-                        "QUICK_SEARCH", Long.toString(item.getId()), signature));
-                boolean changed = !checkpoint.previous.isEmpty()
-                        && (checkpoint.previous.time != checkpoint.current.time
-                        || !checkpoint.previous.gids.equals(checkpoint.current.gids));
-                updates.put(item.getId(), changed);
+                BookmarkUpdatePolicy.Result policy = BookmarkUpdatePolicy.resolve(item);
+                if (!policy.supported) {
+                    updates.put(item.getId(), context.getString(
+                            "language conflict".equals(policy.error)
+                                    ? R.string.update_language_conflict
+                                    : R.string.update_mode_unsupported));
+                    continue;
+                }
+                TagUpdateState state = local.readState(LocalFollowRepository.SOURCE_BOOKMARK,
+                        Long.toString(item.getId()), policy.signature);
+                updates.put(item.getId(), state.checkedAt == 0 ? null : state.displayCount());
+            }
+            if (sort) {
+                bookmarks.sort(Comparator
+                        .comparingInt((QuickSearch item) -> badgeValue(updates.get(item.getId())))
+                        .reversed()
+                        .thenComparingInt(item -> originalOrder.getOrDefault(item.getId(),
+                                Integer.MAX_VALUE)));
             }
             if (listView != null) listView.post(adapter::notifyDataSetChanged);
         });
+    }
+
+    public void refreshUpdateBadges(boolean sort) {
+        loadUpdateBadges(sort);
+    }
+
+    private static int badgeValue(String badge) {
+        if (badge == null || "!".equals(badge)) return 0;
+        if ("20+".equals(badge)) return 21;
+        try { return Integer.parseInt(badge); } catch (NumberFormatException ignored) { return 0; }
+    }
+
+    private void showJobDetails() {
+        LocalRefreshJobStore.Snapshot snapshot = LocalRefreshJobStore.read();
+        if (snapshot == null) return;
+        LocalUpdateTaskDialog.show(context, snapshot, true);
+    }
+
+    private void requestBookmarkRefresh() {
+        LocalRefreshJobStore.Snapshot snapshot = LocalRefreshJobStore.read();
+        if (LocalUpdateService.isActive()
+                || LocalUpdateTaskDialog.isOpenTask(snapshot)) {
+            showJobDetails();
+            return;
+        }
+        long last = LocalRefreshJobStore.lastBookmarkSuccess();
+        boolean recommendGlobal = last == 0
+                || System.currentTimeMillis() - last <= 5L * 24L * 60L * 60L * 1000L;
+        LocalUpdateStartDialog.showBookmarks(context,
+                bookmarks == null ? 0 : bookmarks.size(), recommendGlobal, last,
+                method -> {
+                    requestNotificationPermission();
+                    if (!LocalUpdateService.startBookmarks(context, method)) showJobDetails();
+                });
+    }
+
+    private void onLocalUpdateProgress(LocalRefreshJobStore.Snapshot snapshot) {
+        if (listView == null) return;
+        listView.post(() -> {
+            if (updateToolbar != null) updateToolbar.render(snapshot);
+            boolean terminal = snapshot != null
+                    && !LocalRefreshJobStore.STATUS_RUNNING.equals(snapshot.status)
+                    && !LocalRefreshJobStore.STATUS_PAUSED.equals(snapshot.status);
+            if (terminal) {
+                if (LocalRefreshJobStore.TYPE_BOOKMARK.equals(snapshot.type)) {
+                    loadUpdateBadges(true);
+                } else if (LocalRefreshJobStore.TYPE_BASELINE.equals(snapshot.type)) {
+                    loadUpdateBadges(false);
+                }
+            }
+        });
+    }
+
+    private void requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= 33 && context instanceof Activity) {
+            Activity activity = (Activity) context;
+            if (activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                activity.requestPermissions(
+                        new String[]{Manifest.permission.POST_NOTIFICATIONS}, 8043);
+            }
+        }
     }
 
     public void resume() {
