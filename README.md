@@ -106,13 +106,6 @@ JM 使用易变的内部接口。出现“JM服务暂时不可用”时，请先
 
 # Build
 
-当前功能仅针对调试版构建和验证：
-
-- applicationId：`com.xjs.ehviewer.debug`
-- versionName：`2.0.2.3`
-- versionCode：`116`
-- 正式版 versionCode 仍为 `112`
-
 Windows：
 
 ```powershell
