@@ -33,7 +33,7 @@
         android:key="latest_release"
         android:title="@string/settings_about_latest_release"
         app:allowDividerAbove="true"
-        app:url="https://github.com/xiaojieonly/Ehviewer_CN_SXJ/releases" />
+        app:url="https://github.com/meidorei/Ehviewer_CN_SXJ_manbo/releases" />
 
     <com.hippo.preference.UrlPreference
         android:ellipsize="end"
@@ -63,10 +63,5 @@
         android:defaultValue="false"
         android:key="close_auto_updates"
         android:title="@string/settings_close_automatic_updates" />
-
-    <Preference
-        android:key="donate"
-        android:title="@string/settings_about_donate"
-        app:allowDividerAbove="true" />
 
 </PreferenceScreen>
