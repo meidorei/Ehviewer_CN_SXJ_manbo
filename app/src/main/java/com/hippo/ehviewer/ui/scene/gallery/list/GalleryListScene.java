@@ -108,6 +108,7 @@ import com.hippo.ehviewer.ui.scene.EhCallback;
 import com.hippo.ehviewer.ui.scene.ProgressScene;
 import com.hippo.ehviewer.ui.scene.gallery.detail.GalleryDetailScene;
 import com.hippo.ehviewer.subscription.CheckpointKey;
+import com.hippo.ehviewer.subscription.BookmarkUpdatePolicy;
 import com.hippo.ehviewer.subscription.FeedCheckpoint;
 import com.hippo.ehviewer.subscription.FeedBoundary;
 import com.hippo.ehviewer.subscription.FeedBoundaryDecoration;
@@ -181,6 +182,7 @@ public final class GalleryListScene extends BaseScene
     private FeedBoundary mVisibleFeedBoundary = FeedBoundary.EMPTY;
     private FeedBoundaryDecoration mFeedBoundaryDecoration;
     private boolean mUnreadClearedForContext;
+    private long mUnreadSnapshotAt;
 
     public final static int REQUEST_CODE_SELECT_IMAGE = 0;
 
@@ -200,6 +202,7 @@ public final class GalleryListScene extends BaseScene
     private static final String KEY_FEED_TIME = "feed_time";
     private static final String KEY_FEED_GIDS = "feed_gids";
     private static final String KEY_UNREAD_CLEARED = "unread_cleared";
+    private static final String KEY_UNREAD_SNAPSHOT_AT = "unread_snapshot_at";
 
     final static int STATE_NORMAL = 0;
     final static int STATE_SIMPLE_SEARCH = 1;
@@ -372,11 +375,18 @@ public final class GalleryListScene extends BaseScene
                 ? ListUrlBuilder.MODE_SUBSCRIPTION
                 : type == FeedSourceContext.Type.SUBSCRIPTION_TAG
                 ? ListUrlBuilder.MODE_TAG : ListUrlBuilder.MODE_NORMAL;
-        SearchQueryPolicy.Result query = SearchQueryPolicy.resolve(originalQuery, mode,
-                Settings.getAutoAppendChinese());
-        mFeedSourceContext = new FeedSourceContext(type, sourceKey,
-                QuerySignatureFactory.create(query.effectiveQuery, query.chineseActuallyApplied));
+        boolean localFollow = type == FeedSourceContext.Type.SUBSCRIPTION_TAG;
+        SearchQueryPolicy.Result query = SearchQueryPolicy.resolve(
+                localFollow ? sourceKey : originalQuery, mode,
+                localFollow || Settings.getAutoAppendChinese());
+        mFeedSourceContext = new FeedSourceContext(type, sourceKey, localFollow
+                ? LocalFollowRepository.FIXED_CHINESE_SIGNATURE
+                : QuerySignatureFactory.create(
+                        query.effectiveQuery, query.chineseActuallyApplied));
         mUnreadClearedForContext = false;
+        mUnreadSnapshotAt = localFollow
+                ? LocalFollowRepository.getInstance().captureUnreadSnapshot(
+                        LocalFollowRepository.SOURCE_FOLLOW, sourceKey) : 0;
         mVisibleFeedBoundary = FeedBoundary.EMPTY;
         clearVisibleFeedMarker();
         loadFeedBoundary();
@@ -384,12 +394,12 @@ public final class GalleryListScene extends BaseScene
 
     void setQuickSearchFeedSource(QuickSearch search) {
         if (search == null || search.getId() == null) return;
-        SearchQueryPolicy.Result query = SearchQueryPolicy.resolve(search.keyword, search.mode,
-                Settings.getAutoAppendChinese());
+        BookmarkUpdatePolicy.Result policy = BookmarkUpdatePolicy.resolve(search);
         mFeedSourceContext = new FeedSourceContext(FeedSourceContext.Type.QUICK_SEARCH,
-                Long.toString(search.getId()), QuerySignatureFactory.create(
-                query.effectiveQuery, query.chineseActuallyApplied));
+                Long.toString(search.getId()), policy.signature);
         mUnreadClearedForContext = false;
+        mUnreadSnapshotAt = LocalFollowRepository.getInstance().captureUnreadSnapshot(
+                LocalFollowRepository.SOURCE_BOOKMARK, Long.toString(search.getId()));
         mVisibleFeedBoundary = FeedBoundary.EMPTY;
         clearVisibleFeedMarker();
         loadFeedBoundary();
@@ -411,17 +421,20 @@ public final class GalleryListScene extends BaseScene
         SubscriptionRepository repository = SubscriptionRepository.getInstance();
         repository.execute(() -> {
             FeedCheckpoint checkpoint;
+            FeedBoundary boundary;
             if (context.type == FeedSourceContext.Type.SUBSCRIPTION_AGGREGATE) {
                 checkpoint = repository.readCheckpoint(syncCheckpointKey(context));
+                boundary = checkpoint.previous;
             } else if (context.type == FeedSourceContext.Type.SUBSCRIPTION_TAG) {
-                checkpoint = repository.readLatestCheckpoint(
-                        LocalFollowRepository.CHECKPOINT_FOLLOW,
-                        SubscriptionRepository.normalizeTagName(context.sourceKey));
+                boundary = LocalFollowRepository.getInstance().readOpenBoundary(
+                        LocalFollowRepository.SOURCE_FOLLOW,
+                        SubscriptionRepository.normalizeTagName(context.sourceKey),
+                        LocalFollowRepository.FIXED_CHINESE_SIGNATURE);
             } else {
-                checkpoint = repository.readLatestCheckpoint(
-                        LocalFollowRepository.CHECKPOINT_BOOKMARK, context.sourceKey);
+                boundary = LocalFollowRepository.getInstance().readOpenBoundary(
+                        LocalFollowRepository.SOURCE_BOOKMARK, context.sourceKey,
+                        context.querySignature);
             }
-            FeedBoundary boundary = checkpoint.previous;
             if (mFeedSourceContext != context) return;
             mVisibleFeedBoundary = boundary;
             if (mRecyclerView != null) mRecyclerView.post(() -> {
@@ -548,6 +561,8 @@ public final class GalleryListScene extends BaseScene
                     SubscriptionRepository.parseGids(savedInstanceState.getString(KEY_FEED_GIDS, "")));
             mUnreadClearedForContext =
                     savedInstanceState.getBoolean(KEY_UNREAD_CLEARED, false);
+            mUnreadSnapshotAt = savedInstanceState.getLong(
+                    KEY_UNREAD_SNAPSHOT_AT, 0);
         }
     }
 
@@ -572,6 +587,7 @@ public final class GalleryListScene extends BaseScene
             outState.putString(KEY_FEED_GIDS,
                     SubscriptionRepository.serializeGids(mVisibleFeedBoundary.gids));
             outState.putBoolean(KEY_UNREAD_CLEARED, mUnreadClearedForContext);
+            outState.putLong(KEY_UNREAD_SNAPSHOT_AT, mUnreadSnapshotAt);
         }
     }
 
@@ -2239,15 +2255,20 @@ public final class GalleryListScene extends BaseScene
                 || (context.type != FeedSourceContext.Type.SUBSCRIPTION_TAG
                 && context.type != FeedSourceContext.Type.QUICK_SEARCH)) return;
         mUnreadClearedForContext = true;
+        FeedBoundary openedTop = LocalFollowRepository.boundaryOf(result.galleryInfoList);
+        long unreadSnapshotRowId = mUnreadSnapshotAt;
         SubscriptionRepository.getInstance().execute(() -> {
             if (context.type == FeedSourceContext.Type.SUBSCRIPTION_TAG) {
-                LocalFollowRepository.getInstance().clearState(
+                LocalFollowRepository.getInstance().completeSuccessfulOpen(
                         LocalFollowRepository.SOURCE_FOLLOW,
-                        context.sourceKey);
+                        context.sourceKey,
+                        LocalFollowRepository.FIXED_CHINESE_SIGNATURE,
+                        openedTop, unreadSnapshotRowId);
             } else if (context.type == FeedSourceContext.Type.QUICK_SEARCH) {
-                LocalFollowRepository.getInstance().clearState(
+                LocalFollowRepository.getInstance().completeSuccessfulOpen(
                         LocalFollowRepository.SOURCE_BOOKMARK,
-                        context.sourceKey);
+                        context.sourceKey, context.querySignature,
+                        openedTop, unreadSnapshotRowId);
             }
             MainActivity activity = getActivity2();
             if (activity != null) {
@@ -2392,7 +2413,12 @@ public final class GalleryListScene extends BaseScene
                         mUrlBuilder.isOnlySearchCovers(), mUrlBuilder.isShowExpunged());
                 mClient.execute(request);
             } else {
-                String url = mUrlBuilder.build(Settings.getAutoAppendChinese());
+                FeedSourceContext source = mFeedSourceContext;
+                boolean fixedChinese = source != null
+                        && (source.type == FeedSourceContext.Type.SUBSCRIPTION_TAG
+                        || source.type == FeedSourceContext.Type.QUICK_SEARCH);
+                String url = mUrlBuilder.build(
+                        fixedChinese || Settings.getAutoAppendChinese());
                 EhRequest request = new EhRequest();
                 request.setMethod(EhClient.METHOD_GET_GALLERY_LIST);
                 request.setCallback(new GetGalleryListListener(getContext(),

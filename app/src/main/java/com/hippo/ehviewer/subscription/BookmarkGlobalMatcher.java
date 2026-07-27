@@ -45,7 +45,8 @@ public final class BookmarkGlobalMatcher {
                     return Result.fallback("full-text keyword");
                 }
                 String namespace = token.substring(0, colon).toLowerCase(Locale.ROOT);
-                String value = cleanValue(token.substring(colon + 1));
+                String rawValue = token.substring(colon + 1);
+                String value = cleanValue(rawValue);
                 if (value.isEmpty() || value.indexOf('*') >= 0 || value.indexOf('?') >= 0
                         || value.indexOf('~') >= 0) {
                     return Result.fallback("fuzzy search expression");
@@ -56,6 +57,7 @@ public final class BookmarkGlobalMatcher {
                     continue;
                 }
                 if ("l".equals(namespace)) namespace = "language";
+                if ("lang".equals(namespace)) namespace = "language";
                 String tag = normalizeTag(namespace + ':' + value);
                 if (tag == null) return Result.fallback("unsupported search field");
                 (negative ? negativeTags : positiveTags).add(tag);

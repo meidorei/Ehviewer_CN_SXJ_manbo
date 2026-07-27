@@ -17,6 +17,10 @@ public class BookmarkUpdatePolicyTest {
         QuickSearch search = search(ListUrlBuilder.MODE_NORMAL,
                 "artist:foo language:english$");
         assertFalse(BookmarkUpdatePolicy.resolve(search).supported);
+        assertFalse(BookmarkUpdatePolicy.resolve(search(
+                ListUrlBuilder.MODE_NORMAL, "artist:foo l:english$")).supported);
+        assertFalse(BookmarkUpdatePolicy.resolve(search(
+                ListUrlBuilder.MODE_NORMAL, "artist:foo lang:english$")).supported);
     }
 
     @Test public void specialModesAreRejected() {
@@ -42,9 +46,9 @@ public class BookmarkUpdatePolicyTest {
         assertFalse(result.signature.isEmpty());
     }
 
-    @Test public void globalMatcherSupportsMultipleExactTags() {
+    @Test public void globalMatcherSupportsMultipleStandardTagsWithoutDollarSuffix() {
         QuickSearch search = search(ListUrlBuilder.MODE_NORMAL,
-                "artist:foo female:\"bar baz$\"");
+                "artist:foo female:\"bar baz\"");
         BookmarkGlobalMatcher.Result result = BookmarkGlobalMatcher.compile(search);
         assertTrue(result.exact);
         GalleryInfo gallery = gallery("someone", 4.5f, 30,
@@ -79,6 +83,46 @@ public class BookmarkUpdatePolicyTest {
                 search(ListUrlBuilder.MODE_NORMAL, "artist:foo OR female:bar")).exact);
         assertFalse(BookmarkGlobalMatcher.compile(
                 search(ListUrlBuilder.MODE_NORMAL, "artist:foo*")).exact);
+    }
+
+    @Test public void tagModeIsExactEvenWhenStoredWithoutDollarSuffix() {
+        BookmarkGlobalMatcher.Result result = BookmarkGlobalMatcher.compile(
+                search(ListUrlBuilder.MODE_TAG, "female:bbw"));
+        assertTrue(result.exact);
+        assertTrue(result.matcher.matches(gallery("uploader", 4.5f, 30,
+                "female:bbw", "language:chinese")));
+        assertFalse(result.matcher.matches(gallery("uploader", 4.5f, 30,
+                "female:bbw expansion", "language:chinese")));
+    }
+
+    @Test public void everyStandardNamespaceIsExactWithOrWithoutDollarSuffix() {
+        String[] namespaces = {"artist", "group", "parody", "character", "female",
+                "male", "misc", "language", "cosplayer", "mixed", "other", "reclass"};
+        for (String namespace : namespaces) {
+            assertTrue(namespace, BookmarkGlobalMatcher.compile(
+                    search(ListUrlBuilder.MODE_NORMAL, namespace + ":sample")).exact);
+            assertTrue(namespace + "$", BookmarkGlobalMatcher.compile(
+                    search(ListUrlBuilder.MODE_NORMAL, namespace + ":sample$")).exact);
+        }
+    }
+
+    @Test public void globalMatcherSupportsNegativeStandardTags() {
+        BookmarkGlobalMatcher.Result result = BookmarkGlobalMatcher.compile(
+                search(ListUrlBuilder.MODE_NORMAL, "artist:foo -female:bbw"));
+        assertTrue(result.exact);
+        assertTrue(result.matcher.matches(gallery("uploader", 4.5f, 30,
+                "artist:foo", "language:chinese")));
+        assertFalse(result.matcher.matches(gallery("uploader", 4.5f, 30,
+                "artist:foo", "female:bbw", "language:chinese")));
+    }
+
+    @Test public void bareWordsStillFallBackEvenWithDollarSuffixOrMixedTags() {
+        assertFalse(BookmarkGlobalMatcher.compile(
+                search(ListUrlBuilder.MODE_NORMAL, "bbw")).exact);
+        assertFalse(BookmarkGlobalMatcher.compile(
+                search(ListUrlBuilder.MODE_NORMAL, "bbw$")).exact);
+        assertFalse(BookmarkGlobalMatcher.compile(
+                search(ListUrlBuilder.MODE_NORMAL, "female:bbw titleword")).exact);
     }
 
     private static QuickSearch search(int mode, String keyword) {

@@ -1121,6 +1121,11 @@
     <string name="settings_advanced_export_local_follows_summary">Export only local follow tags as UTF-8 JSON</string>
     <string name="settings_advanced_import_local_follows">Import local follows</string>
     <string name="settings_advanced_import_local_follows_summary">Merge or replace local follow tags from JSON</string>
+    <string name="settings_advanced_local_update_interval">Update-check request interval</string>
+    <string name="settings_advanced_local_update_interval_summary">Current: %1$s seconds · Recommended: 3.2 seconds</string>
+    <string name="settings_advanced_local_update_interval_invalid">Enter 1.0–10.0 seconds with at most one decimal place</string>
+    <string name="settings_advanced_local_update_interval_warning_title">Requests may be too frequent</string>
+    <string name="settings_advanced_local_update_interval_warning">The site permits at most one search every 3 seconds. %1$s seconds may trigger rate limiting. Save anyway?</string>
     <string name="local_follow_export_success">Exported %1$d follow tags</string>
     <string name="local_follow_export_failed">Export failed: %1$s</string>
     <string name="local_follow_import_failed">Import failed: %1$s</string>

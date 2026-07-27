@@ -130,6 +130,14 @@
         android:summary="@string/settings_advanced_import_local_follows_summary"
         android:title="@string/settings_advanced_import_local_follows" />
 
+    <androidx.preference.EditTextPreference
+        android:defaultValue="3.2"
+        android:dialogTitle="@string/settings_advanced_local_update_interval"
+        android:key="local_update_search_interval"
+        android:singleLine="true"
+        android:title="@string/settings_advanced_local_update_interval"
+        app:allowDividerAbove="true" />
+
     <Preference
         android:key="wifi_server"
         android:summary="@string/settings_advanced_wifi_sander_summary"

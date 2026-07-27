@@ -80,10 +80,7 @@ final class LocalUpdateToolbarController {
         } else {
             prefix = context.getString(R.string.local_update_checking);
         }
-        boolean globalScan = LocalUpdateService.METHOD_GLOBAL.equals(snapshot.method)
-                && (LocalRefreshJobStore.TYPE_FOLLOW.equals(snapshot.type)
-                || (LocalRefreshJobStore.TYPE_BOOKMARK.equals(snapshot.type)
-                && (snapshot.currentKey == null || snapshot.currentKey.trim().isEmpty())));
+        boolean globalScan = LocalRefreshJobStore.PHASE_GLOBAL_SCAN.equals(snapshot.phase);
         if (globalScan) {
             return context.getString(R.string.local_update_global_progress, prefix,
                     snapshot.pages, snapshot.galleries);

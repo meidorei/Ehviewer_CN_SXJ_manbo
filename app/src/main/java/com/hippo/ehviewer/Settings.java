@@ -37,6 +37,7 @@ import com.hippo.ehviewer.client.data.FavListUrlBuilder;
 import com.hippo.ehviewer.client.data.GalleryInfo;
 import com.hippo.ehviewer.ui.CommonOperations;
 import com.hippo.ehviewer.ui.scene.gallery.list.GalleryListScene;
+import com.hippo.ehviewer.subscription.SearchIntervalPolicy;
 import com.hippo.lib.glgallery.GalleryView;
 import com.hippo.unifile.UniFile;
 import com.hippo.util.ExceptionUtils;
@@ -178,6 +179,8 @@ public class Settings {
 
     private static final String KEY_AUTO_APPEND_CHINESE = "auto_append_chinese";
     private static final String KEY_GALLERY_LIST_DRAWER_PAGE = "gallery_list_drawer_page";
+    public static final String KEY_LOCAL_UPDATE_SEARCH_INTERVAL =
+            "local_update_search_interval";
 
     public static boolean getAutoAppendChinese() {
         return getBoolean(KEY_AUTO_APPEND_CHINESE, false);
@@ -185,6 +188,21 @@ public class Settings {
 
     public static void putAutoAppendChinese(boolean value) {
         putBoolean(KEY_AUTO_APPEND_CHINESE, value);
+    }
+
+    public static int getLocalUpdateSearchIntervalMs() {
+        String stored = getString(KEY_LOCAL_UPDATE_SEARCH_INTERVAL,
+                SearchIntervalPolicy.formatSeconds(SearchIntervalPolicy.DEFAULT_MS));
+        try {
+            return SearchIntervalPolicy.parseMillis(stored);
+        } catch (IllegalArgumentException ignored) {
+            return SearchIntervalPolicy.DEFAULT_MS;
+        }
+    }
+
+    public static void putLocalUpdateSearchIntervalMs(int millis) {
+        putString(KEY_LOCAL_UPDATE_SEARCH_INTERVAL,
+                SearchIntervalPolicy.formatSeconds(millis));
     }
 
     public static int getGalleryListDrawerPage() {

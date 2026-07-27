@@ -18,6 +18,11 @@ public final class LocalRefreshJobStore {
     public static final String RESULT_PARTIAL = "PARTIAL";
     public static final String RESULT_FAILED = "FAILED";
     public static final String RESULT_CANCELLED = "CANCELLED";
+    public static final String PHASE_PREPARING = "PREPARING";
+    public static final String PHASE_GLOBAL_SCAN = "GLOBAL_SCAN";
+    public static final String PHASE_FOLLOW_QUEUE = "FOLLOW_QUEUE";
+    public static final String PHASE_BOOKMARK_QUEUE = "BOOKMARK_QUEUE";
+    public static final String PHASE_BASELINE = "BASELINE";
     private static final String META_LAST_FOLLOW_SUCCESS = "last_follow_success";
     private static final String META_LAST_BOOKMARK_SUCCESS = "last_bookmark_success";
     private static final String META_ATTEMPT_TIME_SUFFIX = "_last_attempt_time";
@@ -40,11 +45,18 @@ public final class LocalRefreshJobStore {
     }
 
     public static void start(String type, String method, int total, String host) {
+        start(type, method, total, host, SearchIntervalPolicy.DEFAULT_MS);
+    }
+
+    public static void start(String type, String method, int total, String host,
+                             int requestIntervalMs) {
         long now = System.currentTimeMillis();
         EhDB.getDatabase().execSQL("INSERT OR REPLACE INTO LOCAL_REFRESH_JOB" +
-                        "(_id,JOB_TYPE,METHOD,STATUS,CURRENT_INDEX,TOTAL,PAGES,GALLERIES,CURRENT_KEY," +
-                        "SOURCE_HOST,FAILURES,STARTED_AT,UPDATED_AT) VALUES(1,?,?,?,?,?,0,0,'',?,'',?,?)",
-                new Object[]{type, method, STATUS_RUNNING, 0, total, host, now, now});
+                        "(_id,JOB_TYPE,METHOD,STATUS,PHASE,REQUEST_INTERVAL_MS,CURRENT_INDEX," +
+                        "TOTAL,PAGES,GALLERIES,CURRENT_KEY,SOURCE_HOST,FAILURES,STARTED_AT,UPDATED_AT) " +
+                        "VALUES(1,?,?,?,?,?,?,?,0,0,'',?,'',?,?)",
+                new Object[]{type, method, STATUS_RUNNING, PHASE_PREPARING,
+                        requestIntervalMs, 0, total, host, now, now});
     }
 
     public static void progress(int index, int pages, int galleries, String key,
@@ -53,6 +65,13 @@ public final class LocalRefreshJobStore {
                         "GALLERIES=?,CURRENT_KEY=?,FAILURES=?,UPDATED_AT=? WHERE _id=1",
                 new Object[]{index, pages, galleries, key == null ? "" : key,
                         failures == null ? "" : failures, System.currentTimeMillis()});
+    }
+
+    public static void phase(String phase) {
+        EhDB.getDatabase().execSQL(
+                "UPDATE LOCAL_REFRESH_JOB SET PHASE=?,UPDATED_AT=? WHERE _id=1",
+                new Object[]{phase == null ? PHASE_PREPARING : phase,
+                        System.currentTimeMillis()});
     }
 
     public static void updateHost(String host) {
@@ -158,14 +177,16 @@ public final class LocalRefreshJobStore {
 
     public static Snapshot read() {
         try (Cursor cursor = EhDB.getDatabase().rawQuery(
-                "SELECT JOB_TYPE,METHOD,STATUS,CURRENT_INDEX,TOTAL,PAGES,GALLERIES," +
+                "SELECT JOB_TYPE,METHOD,STATUS,PHASE,REQUEST_INTERVAL_MS," +
+                        "CURRENT_INDEX,TOTAL,PAGES,GALLERIES," +
                         "CURRENT_KEY,SOURCE_HOST,FAILURES,STARTED_AT,UPDATED_AT " +
                         "FROM LOCAL_REFRESH_JOB WHERE _id=1", null)) {
             if (!cursor.moveToFirst()) return null;
             return new Snapshot(cursor.getString(0), cursor.getString(1), cursor.getString(2),
-                    cursor.getInt(3), cursor.getInt(4), cursor.getInt(5), cursor.getInt(6),
-                    cursor.getString(7), cursor.getString(8), cursor.getString(9),
-                    cursor.getLong(10), cursor.getLong(11));
+                    cursor.getString(3), cursor.getInt(4), cursor.getInt(5),
+                    cursor.getInt(6), cursor.getInt(7), cursor.getInt(8),
+                    cursor.getString(9), cursor.getString(10), cursor.getString(11),
+                    cursor.getLong(12), cursor.getLong(13));
         }
     }
 
@@ -187,6 +208,8 @@ public final class LocalRefreshJobStore {
         public final String type;
         public final String method;
         public final String status;
+        public final String phase;
+        public final int requestIntervalMs;
         public final int index;
         public final int total;
         public final int pages;
@@ -200,9 +223,20 @@ public final class LocalRefreshJobStore {
         Snapshot(String type, String method, String status, int index, int total, int pages,
                  int galleries, String currentKey, String host, String failures,
                  long startedAt, long updatedAt) {
+            this(type, method, status, PHASE_PREPARING, SearchIntervalPolicy.DEFAULT_MS,
+                    index, total, pages, galleries, currentKey, host, failures,
+                    startedAt, updatedAt);
+        }
+
+        Snapshot(String type, String method, String status, String phase,
+                 int requestIntervalMs, int index, int total, int pages,
+                 int galleries, String currentKey, String host, String failures,
+                 long startedAt, long updatedAt) {
             this.type = type;
             this.method = method;
             this.status = status;
+            this.phase = phase;
+            this.requestIntervalMs = requestIntervalMs;
             this.index = index;
             this.total = total;
             this.pages = pages;

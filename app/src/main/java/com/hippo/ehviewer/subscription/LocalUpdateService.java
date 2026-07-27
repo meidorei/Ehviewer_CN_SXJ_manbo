@@ -17,6 +17,7 @@ import androidx.core.content.ContextCompat;
 import com.hippo.ehviewer.EhApplication;
 import com.hippo.ehviewer.EhDB;
 import com.hippo.ehviewer.R;
+import com.hippo.ehviewer.Settings;
 import com.hippo.ehviewer.client.EhCookieStore;
 import com.hippo.ehviewer.client.EhEngine;
 import com.hippo.ehviewer.client.EhUrl;
@@ -60,7 +61,6 @@ public final class LocalUpdateService extends Service {
     public static final String METHOD_FIRST_PAGE = "FIRST_PAGE";
     private static final String CHANNEL_ID = "local_update";
     private static final int NOTIFICATION_ID = 8042;
-    private static final long SEARCH_INTERVAL_MS = 3200L;
     private static final AtomicBoolean ACTIVE = new AtomicBoolean();
     private static final CopyOnWriteArrayList<WeakReference<Listener>> LISTENERS =
             new CopyOnWriteArrayList<>();
@@ -69,6 +69,7 @@ public final class LocalUpdateService extends Service {
     private volatile boolean cancelRequested;
     private Thread worker;
     private long lastSearchAt;
+    private int searchIntervalMs = SearchIntervalPolicy.DEFAULT_MS;
     private String effectiveHost;
     private final AtomicReference<Call> activeCall = new AtomicReference<>();
 
@@ -255,7 +256,12 @@ public final class LocalUpdateService extends Service {
         if (pending.isEmpty()) throw new IllegalStateException("没有待建立的基线");
         String host = preferredHost();
         effectiveHost = host;
-        LocalRefreshJobStore.start("BASELINE", "AUTO", pending.size(), host);
+        LocalRefreshJobStore.Snapshot previous = LocalRefreshJobStore.read();
+        searchIntervalMs = intervalForJob(previous,
+                LocalRefreshJobStore.TYPE_BASELINE, "AUTO");
+        LocalRefreshJobStore.start("BASELINE", "AUTO", pending.size(), host,
+                searchIntervalMs);
+        LocalRefreshJobStore.phase(LocalRefreshJobStore.PHASE_BASELINE);
         notifyListeners();
         int completed = 0;
         List<String> fallbacks = new ArrayList<>();
@@ -436,12 +442,14 @@ public final class LocalUpdateService extends Service {
         effectiveHost = host;
         String method = requestedMethod == null ? METHOD_GLOBAL : requestedMethod;
         LocalRefreshJobStore.Snapshot previous = LocalRefreshJobStore.read();
+        searchIntervalMs = intervalForJob(previous,
+                LocalRefreshJobStore.TYPE_FOLLOW, method);
         int resumeIndex = previous != null
                 && LocalRefreshJobStore.STATUS_PAUSED.equals(previous.status)
                 && "FOLLOW".equals(previous.type) && method.equals(previous.method)
                 ? Math.max(0, Math.min(previous.index, tags.size())) : 0;
         LocalRefreshJobStore.start(LocalRefreshJobStore.TYPE_FOLLOW,
-                method, tags.size(), host);
+                method, tags.size(), host, searchIntervalMs);
         notifyListeners();
         if (tags.isEmpty()) throw new IllegalStateException("追更列表为空");
         if (METHOD_GLOBAL.equals(method)) {
@@ -452,100 +460,132 @@ public final class LocalUpdateService extends Service {
     }
 
     private void runGlobal(List<String> tags, String host) throws Throwable {
+        LocalRefreshJobStore.phase(LocalRefreshJobStore.PHASE_GLOBAL_SCAN);
         String contextKey = sourceContext(effectiveHost);
         Map<String, FeedCheckpoint> old = new HashMap<>();
-        boolean firstSource = true;
+        boolean hadExistingItemCursor = false;
         for (String tag : tags) {
             CheckpointKey key = followCheckpoint(contextKey, tag);
+            if (!SubscriptionRepository.getInstance().readCheckpoint(key).current.isEmpty()) {
+                hadExistingItemCursor = true;
+            }
             ensureStateProvisional(LocalFollowRepository.SOURCE_FOLLOW, tag,
                     LocalFollowRepository.FIXED_CHINESE_SIGNATURE, key);
-            FeedCheckpoint checkpoint = SubscriptionRepository.getInstance().readCheckpoint(key);
-            old.put(tag, checkpoint);
-            if (!checkpoint.current.isEmpty()) firstSource = false;
+            old.put(tag, SubscriptionRepository.getInstance().readCheckpoint(key));
         }
+        FeedBoundary globalCursor = LocalGlobalCursorStore.read(
+                contextKey, LocalGlobalCursorStore.TYPE_FOLLOW,
+                LocalFollowRepository.FIXED_CHINESE_SIGNATURE);
+        if (globalCursor.isEmpty() && hadExistingItemCursor) {
+            globalCursor = LocalGlobalCursorStore.oldest(old);
+        }
+        boolean firstSource = globalCursor.isEmpty();
         ListUrlBuilder builder = new ListUrlBuilder();
         builder.setMode(ListUrlBuilder.MODE_NORMAL);
         builder.setKeyword(null);
         String url = withHost(builder.build(true), host);
         Map<String, List<GalleryInfo>> matches = new LinkedHashMap<>();
-        Set<String> reached = new HashSet<>();
         for (String tag : tags) matches.put(tag, new ArrayList<>());
         FeedBoundary globalTop = FeedBoundary.EMPTY;
         int pages = 0;
         int galleries = 0;
+        boolean reachedGlobalCursor = false;
         while (url != null && pages < 30 && !shouldStop()) {
-            GalleryListParser.Result page = fetchPage(url, ListUrlBuilder.MODE_NORMAL);
+            String requestedUrl = url;
+            GalleryListParser.Result page = fetchPage(requestedUrl, ListUrlBuilder.MODE_NORMAL);
             if (shouldStop()) return;
-            if (!url.startsWith(effectiveHost)) {
-                url = withHost(url, effectiveHost);
+            if (!requestedUrl.startsWith(effectiveHost)) {
                 contextKey = sourceContext(effectiveHost);
                 old.clear();
-                firstSource = true;
+                hadExistingItemCursor = false;
                 for (String tag : tags) {
                     CheckpointKey key = followCheckpoint(contextKey, tag);
+                    if (!SubscriptionRepository.getInstance()
+                            .readCheckpoint(key).current.isEmpty()) {
+                        hadExistingItemCursor = true;
+                    }
                     ensureStateProvisional(LocalFollowRepository.SOURCE_FOLLOW, tag,
                             LocalFollowRepository.FIXED_CHINESE_SIGNATURE, key);
-                    FeedCheckpoint checkpoint =
-                            SubscriptionRepository.getInstance().readCheckpoint(key);
-                    old.put(tag, checkpoint);
-                    if (!checkpoint.current.isEmpty()) firstSource = false;
+                    old.put(tag, SubscriptionRepository.getInstance().readCheckpoint(key));
                 }
+                globalCursor = LocalGlobalCursorStore.read(
+                        contextKey, LocalGlobalCursorStore.TYPE_FOLLOW,
+                        LocalFollowRepository.FIXED_CHINESE_SIGNATURE);
+                if (globalCursor.isEmpty() && hadExistingItemCursor) {
+                    globalCursor = LocalGlobalCursorStore.oldest(old);
+                }
+                firstSource = globalCursor.isEmpty();
+                for (List<GalleryInfo> value : matches.values()) value.clear();
+                globalTop = FeedBoundary.EMPTY;
+                reachedGlobalCursor = false;
+                pages = 0;
+                galleries = 0;
+                url = withHost(builder.build(true), effectiveHost);
+                continue;
             }
             pages++;
             galleries += page.galleryInfoList.size();
             if (globalTop.isEmpty()) globalTop =
                     LocalFollowRepository.boundaryOf(page.galleryInfoList);
+            if (!firstSource && GlobalScanPolicy.hasPassedCursor(
+                    globalCursor, page.galleryInfoList)) {
+                reachedGlobalCursor = true;
+            }
             for (GalleryInfo gallery : page.galleryInfoList) {
                 Set<String> galleryTags = normalizedTags(gallery);
                 for (String tag : tags) {
-                    FeedBoundary boundary = old.get(tag).current;
-                    if (!boundary.isEmpty()
-                            && gallery.postedTimestamp < boundary.time) reached.add(tag);
-                    if (galleryTags.contains(tag)) {
-                        if (!boundary.isEmpty()
-                                && boundary.isFirstOld(gallery.postedTimestamp, gallery.gid)) {
-                            reached.add(tag);
-                        } else if (boundary.isEmpty()
-                                || boundary.isNew(gallery.postedTimestamp, gallery.gid)) {
-                            matches.get(tag).add(gallery);
-                        }
-                    }
+                    if (galleryTags.contains(tag)) matches.get(tag).add(gallery);
                 }
             }
-            LocalRefreshJobStore.progress(reached.size(), pages, galleries, "", "");
+            LocalRefreshJobStore.progress(0, pages, galleries, "", "");
             updateNotification("全局扫描：" + pages + " 页 · " + galleries + " 本",
                     pages, 30, true);
             notifyListeners();
-            if (firstSource || reached.size() == tags.size()) break;
+            if (firstSource || reachedGlobalCursor) break;
             url = resolveNext(url, page.nextHref);
+            if (url == null) reachedGlobalCursor = true;
         }
         if (shouldStop()) return;
+        if (globalTop.isEmpty()) {
+            throw new IllegalStateException("中文结果为空，无法建立追更基线");
+        }
         LocalFollowRepository repository = LocalFollowRepository.getInstance();
         if (firstSource) {
-            if (globalTop.isEmpty()) {
-                throw new IllegalStateException("中文结果为空，无法建立追更基线");
-            }
             for (String tag : tags) repository.establishBaseline(
                     LocalFollowRepository.SOURCE_FOLLOW, tag,
                     LocalFollowRepository.FIXED_CHINESE_SIGNATURE,
                     followCheckpoint(contextKey, tag), globalTop);
+            LocalGlobalCursorStore.write(contextKey, LocalGlobalCursorStore.TYPE_FOLLOW,
+                    LocalFollowRepository.FIXED_CHINESE_SIGNATURE, globalTop);
+            LocalRefreshJobStore.progress(tags.size(), pages, galleries, "", "");
             return;
         }
-        List<String> unresolved = new ArrayList<>();
-        for (String tag : tags) {
-            List<GalleryInfo> tagMatches = matches.get(tag);
-            if (reached.contains(tag)) {
+        if (reachedGlobalCursor) {
+            for (String tag : tags) {
                 repository.commitGlobalScan(LocalFollowRepository.SOURCE_FOLLOW, tag,
                         LocalFollowRepository.FIXED_CHINESE_SIGNATURE,
-                        followCheckpoint(contextKey, tag), globalTop, tagMatches);
-            } else {
-                unresolved.add(tag);
+                        followCheckpoint(contextKey, tag), globalTop, matches.get(tag));
             }
+            LocalGlobalCursorStore.write(contextKey, LocalGlobalCursorStore.TYPE_FOLLOW,
+                    LocalFollowRepository.FIXED_CHINESE_SIGNATURE, globalTop);
+            LocalRefreshJobStore.progress(tags.size(), pages, galleries, "", "");
+            return;
         }
-        if (!unresolved.isEmpty()) runTagQueue(unresolved, host, 0);
+
+        runTagQueue(tags, effectiveHost, 0, 0, tags.size(), pages, galleries);
+        throwIfStopRequested();
+        LocalGlobalCursorStore.write(contextKey, LocalGlobalCursorStore.TYPE_FOLLOW,
+                LocalFollowRepository.FIXED_CHINESE_SIGNATURE, globalTop);
     }
 
     private void runTagQueue(List<String> tags, String host, int startIndex) throws Throwable {
+        runTagQueue(tags, host, startIndex, 0, tags.size(), 0, 0);
+    }
+
+    private void runTagQueue(List<String> tags, String host, int startIndex,
+                             int completedBefore, int total,
+                             int scannedPages, int scannedGalleries) throws Throwable {
+        LocalRefreshJobStore.phase(LocalRefreshJobStore.PHASE_FOLLOW_QUEUE);
         List<String> failures = new ArrayList<>();
         for (int i = startIndex; i < tags.size() && !shouldStop(); i++) {
             String tag = tags.get(i);
@@ -559,14 +599,16 @@ public final class LocalUpdateService extends Service {
                         LocalFollowRepository.SOURCE_FOLLOW, tag,
                         LocalFollowRepository.FIXED_CHINESE_SIGNATURE, safeMessage(error));
             }
-            LocalRefreshJobStore.progress(i + 1, 1, i + 1, tag,
+            int done = completedBefore + i + 1;
+            LocalRefreshJobStore.progress(done, scannedPages, scannedGalleries, tag,
                     joinFailures(failures));
-            updateNotification("逐标签：" + (i + 1) + "/" + tags.size(),
-                    i + 1, tags.size(), false);
+            updateNotification("逐标签：" + done + "/" + total,
+                    done, total, false);
             notifyListeners();
         }
         retryTags(failures, host);
-        LocalRefreshJobStore.progress(tags.size(), 1, tags.size(), "",
+        LocalRefreshJobStore.progress(completedBefore + tags.size(),
+                scannedPages, scannedGalleries, "",
                 joinFailures(failures));
     }
 
@@ -630,13 +672,15 @@ public final class LocalUpdateService extends Service {
         String method = onlyId != null ? "SINGLE:" + onlyId
                 : METHOD_GLOBAL.equals(requestedMethod) ? METHOD_GLOBAL : METHOD_FIRST_PAGE;
         LocalRefreshJobStore.Snapshot previous = LocalRefreshJobStore.read();
+        searchIntervalMs = intervalForJob(previous,
+                LocalRefreshJobStore.TYPE_BOOKMARK, method);
         int resumeIndex = onlyId == null && METHOD_FIRST_PAGE.equals(method) && previous != null
                 && LocalRefreshJobStore.STATUS_PAUSED.equals(previous.status)
                 && "BOOKMARK".equals(previous.type)
                 && method.equals(previous.method)
                 ? Math.max(0, Math.min(previous.index, jobs.size())) : 0;
         LocalRefreshJobStore.start(LocalRefreshJobStore.TYPE_BOOKMARK,
-                method, jobs.size(), host);
+                method, jobs.size(), host, searchIntervalMs);
         notifyListeners();
         if (jobs.isEmpty()) throw new IllegalStateException("书签列表为空");
         if (onlyId == null && METHOD_GLOBAL.equals(method)) {
@@ -647,8 +691,9 @@ public final class LocalUpdateService extends Service {
     }
 
     private void runGlobalBookmarks(List<QuickSearch> jobs, String host) throws Throwable {
+        LocalRefreshJobStore.phase(LocalRefreshJobStore.PHASE_GLOBAL_SCAN);
         List<GlobalBookmark> exact = new ArrayList<>();
-        LinkedHashMap<Long, QuickSearch> fallback = new LinkedHashMap<>();
+        LinkedHashMap<Long, QuickSearch> complexFallback = new LinkedHashMap<>();
         int completed = 0;
         LocalFollowRepository local = LocalFollowRepository.getInstance();
         for (QuickSearch search : jobs) {
@@ -663,18 +708,28 @@ public final class LocalUpdateService extends Service {
             }
             BookmarkGlobalMatcher.Result matcher = BookmarkGlobalMatcher.compile(search);
             if (!matcher.exact) {
-                fallback.put(search.id, search);
+                complexFallback.put(search.id, search);
             } else {
                 exact.add(new GlobalBookmark(search, policy, matcher.matcher));
             }
         }
 
+        List<GlobalBookmark> allExact = new ArrayList<>(exact);
         String contextKey = sourceContext(effectiveHost);
         Map<Long, FeedCheckpoint> old = new LinkedHashMap<>();
         Map<Long, List<GalleryInfo>> matches = new LinkedHashMap<>();
+        boolean hadExistingItemCursor =
+                hasExistingGlobalBookmarkCursor(exact, contextKey);
         initializeGlobalBookmarks(exact, contextKey, old, matches);
-        Set<Long> baselines = emptyCheckpointIds(exact, old);
-        Set<Long> reached = new HashSet<>();
+        FeedBoundary globalCursor = LocalGlobalCursorStore.read(
+                contextKey, LocalGlobalCursorStore.TYPE_BOOKMARK,
+                LocalFollowRepository.FIXED_CHINESE_SIGNATURE);
+        if (globalCursor.isEmpty() && hadExistingItemCursor) {
+            globalCursor = LocalGlobalCursorStore.oldest(old);
+        }
+        List<QuickSearch> bridgeFallback = new ArrayList<>();
+        exact = selectGloballyCovered(exact, old, globalCursor, bridgeFallback);
+        boolean firstSource = globalCursor.isEmpty();
         FeedBoundary globalTop = FeedBoundary.EMPTY;
         ListUrlBuilder builder = new ListUrlBuilder();
         builder.setMode(ListUrlBuilder.MODE_NORMAL);
@@ -682,85 +737,121 @@ public final class LocalUpdateService extends Service {
         String url = withHost(builder.build(true), host);
         int pages = 0;
         int galleries = 0;
+        boolean reachedGlobalCursor = false;
         while (!exact.isEmpty() && url != null && pages < 30 && !shouldStop()) {
-            GalleryListParser.Result page = fetchPage(url, ListUrlBuilder.MODE_NORMAL);
+            String requestedUrl = url;
+            GalleryListParser.Result page = fetchPage(requestedUrl, ListUrlBuilder.MODE_NORMAL);
             throwIfStopRequested();
-            if (!url.startsWith(effectiveHost)) {
-                url = withHost(url, effectiveHost);
+            if (!requestedUrl.startsWith(effectiveHost)) {
                 contextKey = sourceContext(effectiveHost);
+                exact = new ArrayList<>(allExact);
+                bridgeFallback.clear();
                 old.clear();
                 matches.clear();
-                reached.clear();
                 globalTop = FeedBoundary.EMPTY;
+                hadExistingItemCursor =
+                        hasExistingGlobalBookmarkCursor(exact, contextKey);
                 initializeGlobalBookmarks(exact, contextKey, old, matches);
-                baselines = emptyCheckpointIds(exact, old);
+                globalCursor = LocalGlobalCursorStore.read(
+                        contextKey, LocalGlobalCursorStore.TYPE_BOOKMARK,
+                        LocalFollowRepository.FIXED_CHINESE_SIGNATURE);
+                if (globalCursor.isEmpty() && hadExistingItemCursor) {
+                    globalCursor = LocalGlobalCursorStore.oldest(old);
+                }
+                exact = selectGloballyCovered(
+                        exact, old, globalCursor, bridgeFallback);
+                firstSource = globalCursor.isEmpty();
+                reachedGlobalCursor = false;
+                pages = 0;
+                galleries = 0;
+                url = withHost(builder.build(true), effectiveHost);
+                continue;
             }
             pages++;
             galleries += page.galleryInfoList.size();
             if (globalTop.isEmpty()) {
                 globalTop = LocalFollowRepository.boundaryOf(page.galleryInfoList);
             }
+            if (!firstSource && GlobalScanPolicy.hasPassedCursor(
+                    globalCursor, page.galleryInfoList)) {
+                reachedGlobalCursor = true;
+            }
             for (GalleryInfo gallery : page.galleryInfoList) {
                 for (GlobalBookmark work : exact) {
-                    FeedBoundary boundary = old.get(work.search.id).current;
-                    if (!boundary.isEmpty() && gallery.postedTimestamp < boundary.time) {
-                        reached.add(work.search.id);
-                    }
-                    if (!work.matcher.matches(gallery)) continue;
-                    if (!boundary.isEmpty()
-                            && boundary.isFirstOld(gallery.postedTimestamp, gallery.gid)) {
-                        reached.add(work.search.id);
-                    } else if (boundary.isEmpty()
-                            || boundary.isNew(gallery.postedTimestamp, gallery.gid)) {
+                    if (work.matcher.matches(gallery)) {
                         matches.get(work.search.id).add(gallery);
                     }
                 }
             }
-            LocalRefreshJobStore.progress(
-                    Math.min(jobs.size(), completed + reached.size()),
-                    pages, galleries, "", "");
+            LocalRefreshJobStore.progress(completed, pages, galleries, "", "");
             updateNotification("书签全局扫描：" + pages + " 页 · " + galleries + " 本",
                     pages, 30, true);
             notifyListeners();
-            if (reached.size() + baselines.size() == exact.size()) break;
+            if (firstSource || reachedGlobalCursor) break;
             url = resolveNext(url, page.nextHref);
+            if (url == null) reachedGlobalCursor = true;
         }
         throwIfStopRequested();
 
-        if (globalTop.isEmpty()) {
-            for (GlobalBookmark work : exact) fallback.put(work.search.id, work.search);
-        } else {
-            // Do not observe stop requests inside this short commit phase: the global scan is
-            // submitted as one logical batch after all network work has completed.
+        List<QuickSearch> cursorFallback = new ArrayList<>();
+        if (!exact.isEmpty() && globalTop.isEmpty()) {
+            throw new IllegalStateException("中文结果为空，无法建立书签基线");
+        } else if (!exact.isEmpty() && firstSource) {
             for (GlobalBookmark work : exact) {
-                FeedCheckpoint checkpoint = old.get(work.search.id);
                 String key = Long.toString(work.search.id);
                 CheckpointKey checkpointKey = bookmarkCheckpoint(
                         contextKey, key, work.policy.signature);
-                if (checkpoint.current.isEmpty()) {
-                    local.establishBaseline(LocalFollowRepository.SOURCE_BOOKMARK, key,
-                            work.policy.signature, checkpointKey, globalTop);
-                    completed++;
-                } else if (reached.contains(work.search.id)) {
-                    local.commitGlobalScan(LocalFollowRepository.SOURCE_BOOKMARK, key,
-                            work.policy.signature, checkpointKey, globalTop,
-                            matches.get(work.search.id));
-                    completed++;
-                } else {
-                    fallback.put(work.search.id, work.search);
-                }
+                local.establishBaseline(LocalFollowRepository.SOURCE_BOOKMARK, key,
+                        work.policy.signature, checkpointKey, globalTop);
+                completed++;
             }
+            LocalGlobalCursorStore.write(contextKey,
+                    LocalGlobalCursorStore.TYPE_BOOKMARK,
+                    LocalFollowRepository.FIXED_CHINESE_SIGNATURE, globalTop);
+        } else if (!exact.isEmpty() && reachedGlobalCursor) {
+            for (GlobalBookmark work : exact) {
+                String key = Long.toString(work.search.id);
+                local.commitGlobalScan(LocalFollowRepository.SOURCE_BOOKMARK, key,
+                        work.policy.signature,
+                        bookmarkCheckpoint(contextKey, key, work.policy.signature),
+                        globalTop, matches.get(work.search.id));
+                completed++;
+            }
+            LocalGlobalCursorStore.write(contextKey,
+                    LocalGlobalCursorStore.TYPE_BOOKMARK,
+                    LocalFollowRepository.FIXED_CHINESE_SIGNATURE, globalTop);
+        } else {
+            for (GlobalBookmark work : exact) cursorFallback.add(work.search);
         }
 
         LocalRefreshJobStore.progress(completed, pages, galleries,
-                fallback.isEmpty() ? "" : "自动降级 " + fallback.size() + " 项", "");
+                cursorFallback.isEmpty() && bridgeFallback.isEmpty()
+                        && complexFallback.isEmpty()
+                        ? "" : "自动降级 "
+                        + (cursorFallback.size() + bridgeFallback.size()
+                        + complexFallback.size()) + " 项", "");
         notifyListeners();
-        if (!fallback.isEmpty()) {
-            runBookmarkQueue(new ArrayList<>(fallback.values()), effectiveHost,
-                    0, completed, jobs.size());
-        } else {
-            LocalRefreshJobStore.progress(jobs.size(), pages, galleries, "", "");
+        if (!cursorFallback.isEmpty()) {
+            runBookmarkQueue(cursorFallback, effectiveHost, 0, completed,
+                    jobs.size(), pages, galleries, globalTop);
+            completed += cursorFallback.size();
+            throwIfStopRequested();
+            LocalGlobalCursorStore.write(contextKey,
+                    LocalGlobalCursorStore.TYPE_BOOKMARK,
+                    LocalFollowRepository.FIXED_CHINESE_SIGNATURE, globalTop);
         }
+        if (!bridgeFallback.isEmpty()) {
+            runBookmarkQueue(bridgeFallback, effectiveHost, 0, completed,
+                    jobs.size(), pages, galleries, globalTop);
+            completed += bridgeFallback.size();
+        }
+        if (!complexFallback.isEmpty()) {
+            runBookmarkQueue(new ArrayList<>(complexFallback.values()), effectiveHost,
+                    0, completed, jobs.size(), pages, galleries);
+            completed += complexFallback.size();
+        }
+        LocalRefreshJobStore.progress(Math.min(jobs.size(), completed),
+                pages, galleries, "", "");
     }
 
     private void initializeGlobalBookmarks(
@@ -779,34 +870,69 @@ public final class LocalUpdateService extends Service {
         }
     }
 
-    private static Set<Long> emptyCheckpointIds(
-            List<GlobalBookmark> jobs, Map<Long, FeedCheckpoint> checkpoints) {
-        Set<Long> result = new HashSet<>();
+    private static List<GlobalBookmark> selectGloballyCovered(
+            List<GlobalBookmark> jobs, Map<Long, FeedCheckpoint> checkpoints,
+            FeedBoundary globalCursor, List<QuickSearch> bridgeFallback) {
+        if (globalCursor == null || globalCursor.isEmpty()) {
+            return jobs;
+        }
+        List<GlobalBookmark> covered = new ArrayList<>();
         for (GlobalBookmark work : jobs) {
             FeedCheckpoint checkpoint = checkpoints.get(work.search.id);
-            if (checkpoint != null && checkpoint.current.isEmpty()) {
-                result.add(work.search.id);
+            if (checkpoint != null && GlobalScanPolicy.requiresItemBridge(
+                    checkpoint.current, globalCursor)) {
+                bridgeFallback.add(work.search);
+            } else {
+                covered.add(work);
             }
         }
-        return result;
+        return covered;
     }
 
     private void runBookmarkQueue(List<QuickSearch> jobs, String host, int startIndex,
                                   int completedBefore, int total) throws Throwable {
+        runBookmarkQueue(jobs, host, startIndex, completedBefore, total, 0, 0);
+    }
+
+    private boolean hasExistingGlobalBookmarkCursor(
+            List<GlobalBookmark> jobs, String contextKey) {
+        for (GlobalBookmark work : jobs) {
+            String key = Long.toString(work.search.id);
+            if (!SubscriptionRepository.getInstance().readCheckpoint(
+                    bookmarkCheckpoint(contextKey, key, work.policy.signature))
+                    .current.isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void runBookmarkQueue(List<QuickSearch> jobs, String host, int startIndex,
+                                  int completedBefore, int total,
+                                  int scannedPages, int scannedGalleries) throws Throwable {
+        runBookmarkQueue(jobs, host, startIndex, completedBefore, total,
+                scannedPages, scannedGalleries, null);
+    }
+
+    private void runBookmarkQueue(List<QuickSearch> jobs, String host, int startIndex,
+                                  int completedBefore, int total,
+                                  int scannedPages, int scannedGalleries,
+                                  @Nullable FeedBoundary synchronizedTop) throws Throwable {
+        LocalRefreshJobStore.phase(LocalRefreshJobStore.PHASE_BOOKMARK_QUEUE);
         List<QuickSearch> failures = new ArrayList<>();
         effectiveHost = host;
         for (int i = startIndex; i < jobs.size() && !shouldStop(); i++) {
             QuickSearch search = jobs.get(i);
             String key = Long.toString(search.id);
             try {
-                checkBookmark(search);
+                checkBookmark(search, synchronizedTop);
             } catch (Throwable error) {
                 if (shouldStop()) return;
                 if (!isRetryable(error)) throw error;
                 failures.add(search);
             }
             int done = completedBefore + i + 1;
-            LocalRefreshJobStore.progress(done, 1, done,
+            LocalRefreshJobStore.progress(done, scannedPages, scannedGalleries,
                     search.name == null ? key : search.name, joinQuickFailures(failures));
             updateNotification("逐书签：" + done + "/" + total,
                     done, total, false);
@@ -817,7 +943,7 @@ public final class LocalUpdateService extends Service {
             Thread.sleep(attempt * 1600L);
             for (QuickSearch search : failures) {
                 try {
-                    checkBookmark(search);
+                    checkBookmark(search, synchronizedTop);
                 } catch (Throwable error) {
                     if (shouldStop()) return;
                     if (!isRetryable(error)) throw error;
@@ -827,14 +953,17 @@ public final class LocalUpdateService extends Service {
             failures = remaining;
         }
         if (!failures.isEmpty()) {
-            LocalRefreshJobStore.progress(total, 1, total, "",
+            LocalRefreshJobStore.progress(completedBefore + jobs.size(),
+                    scannedPages, scannedGalleries, "",
                     joinQuickFailures(failures));
             throw new IllegalStateException(failures.size() + " 个书签检查失败");
         }
-        LocalRefreshJobStore.progress(total, 1, total, "", "");
+        LocalRefreshJobStore.progress(completedBefore + jobs.size(),
+                scannedPages, scannedGalleries, "", "");
     }
 
-    private void checkBookmark(QuickSearch search) throws Throwable {
+    private void checkBookmark(
+            QuickSearch search, @Nullable FeedBoundary synchronizedTop) throws Throwable {
         BookmarkUpdatePolicy.Result policy = BookmarkUpdatePolicy.resolve(search);
         String key = Long.toString(search.id);
         LocalFollowRepository local = LocalFollowRepository.getInstance();
@@ -852,11 +981,21 @@ public final class LocalUpdateService extends Service {
         ensureStateProvisional(LocalFollowRepository.SOURCE_BOOKMARK, key,
                 policy.signature, checkpoint);
         if (page.galleryInfoList.isEmpty()) {
-            local.markCheckedWithoutChanges(
-                    LocalFollowRepository.SOURCE_BOOKMARK, key, policy.signature);
-        } else {
+            if (synchronizedTop == null || synchronizedTop.isEmpty()) {
+                local.markCheckedWithoutChanges(
+                        LocalFollowRepository.SOURCE_BOOKMARK, key, policy.signature);
+            } else {
+                local.commitSynchronizedPage(
+                        LocalFollowRepository.SOURCE_BOOKMARK, key, policy.signature,
+                        checkpoint, synchronizedTop, page.galleryInfoList);
+            }
+        } else if (synchronizedTop == null || synchronizedTop.isEmpty()) {
             local.commitPage(LocalFollowRepository.SOURCE_BOOKMARK, key, policy.signature,
                     checkpoint, page.galleryInfoList, false);
+        } else {
+            local.commitSynchronizedPage(
+                    LocalFollowRepository.SOURCE_BOOKMARK, key, policy.signature,
+                    checkpoint, synchronizedTop, page.galleryInfoList);
         }
     }
 
@@ -883,9 +1022,21 @@ public final class LocalUpdateService extends Service {
     }
 
     private void waitForSearchSlot() throws InterruptedException {
-        long wait = SEARCH_INTERVAL_MS - (System.currentTimeMillis() - lastSearchAt);
+        long wait = searchIntervalMs - (System.currentTimeMillis() - lastSearchAt);
         if (wait > 0) Thread.sleep(wait);
         lastSearchAt = System.currentTimeMillis();
+    }
+
+    private static int intervalForJob(@Nullable LocalRefreshJobStore.Snapshot previous,
+                                      String type, String method) {
+        if (previous != null
+                && LocalRefreshJobStore.STATUS_PAUSED.equals(previous.status)
+                && type.equals(previous.type) && method.equals(previous.method)
+                && previous.requestIntervalMs >= SearchIntervalPolicy.MIN_MS
+                && previous.requestIntervalMs <= SearchIntervalPolicy.MAX_MS) {
+            return previous.requestIntervalMs;
+        }
+        return Settings.getLocalUpdateSearchIntervalMs();
     }
 
     private boolean shouldStop() {
