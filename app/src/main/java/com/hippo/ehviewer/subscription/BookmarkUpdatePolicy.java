@@ -10,7 +10,7 @@ import java.util.regex.Pattern;
 /** Stable, fixed-Chinese update contract for saved searches. */
 public final class BookmarkUpdatePolicy {
     private static final Pattern POSITIVE_LANGUAGE = Pattern.compile(
-            "(?i)(?<![-~])language\\s*:\\s*\"?([^\"\\s$]+)");
+            "(?i)(?<![-~])(?:language|lang|l)\\s*:\\s*\"?([^\"\\s$]+)");
 
     private BookmarkUpdatePolicy() {}
 

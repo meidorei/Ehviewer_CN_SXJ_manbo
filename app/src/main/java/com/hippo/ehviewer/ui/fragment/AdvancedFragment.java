@@ -25,20 +25,24 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.text.InputType;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
+import androidx.preference.EditTextPreference;
 import androidx.preference.Preference;
 
 import com.hippo.ehviewer.AppConfig;
 import com.hippo.ehviewer.EhApplication;
 import com.hippo.ehviewer.EhDB;
 import com.hippo.ehviewer.R;
+import com.hippo.ehviewer.Settings;
 import com.hippo.ehviewer.subscription.LocalFollowJson;
 import com.hippo.ehviewer.subscription.LocalFollowRepository;
 import com.hippo.ehviewer.subscription.LocalUpdateService;
+import com.hippo.ehviewer.subscription.SearchIntervalPolicy;
 import com.hippo.ehviewer.ui.wifi.WiFiClientActivity;
 import com.hippo.ehviewer.ui.wifi.WiFiServerActivity;
 import com.hippo.ehviewer.widget.ProgressHelper;
@@ -65,6 +69,8 @@ public class AdvancedFragment extends BasePreferenceFragmentCompat
     private static final String KEY_IMPORT_DATA = "import_data";
     private static final String KEY_EXPORT_LOCAL_FOLLOWS = "export_local_follows";
     private static final String KEY_IMPORT_LOCAL_FOLLOWS = "import_local_follows";
+    private static final String KEY_LOCAL_UPDATE_SEARCH_INTERVAL =
+            Settings.KEY_LOCAL_UPDATE_SEARCH_INTERVAL;
     private static final String KEY_WIFI_SERVER = "wifi_server";
     private static final String KEY_WIFI_CLIENT = "wifi_client";
     private static final int REQUEST_EXPORT_LOCAL_FOLLOWS = 4101;
@@ -85,6 +91,8 @@ public class AdvancedFragment extends BasePreferenceFragmentCompat
         Preference importData = findPreference(KEY_IMPORT_DATA);
         Preference exportLocalFollows = findPreference(KEY_EXPORT_LOCAL_FOLLOWS);
         Preference importLocalFollows = findPreference(KEY_IMPORT_LOCAL_FOLLOWS);
+        EditTextPreference localUpdateInterval =
+                findPreference(KEY_LOCAL_UPDATE_SEARCH_INTERVAL);
         Preference socketData = findPreference(KEY_WIFI_SERVER);
         Preference clientData = findPreference(KEY_WIFI_CLIENT);
 
@@ -97,6 +105,16 @@ public class AdvancedFragment extends BasePreferenceFragmentCompat
         clientData.setOnPreferenceClickListener(this);
 
         appLanguage.setOnPreferenceChangeListener(this);
+        if (localUpdateInterval != null) {
+            localUpdateInterval.setOnBindEditTextListener(editText -> {
+                editText.setSingleLine(true);
+                editText.setInputType(InputType.TYPE_CLASS_NUMBER
+                        | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+            });
+            localUpdateInterval.setOnPreferenceChangeListener(this);
+            updateIntervalSummary(localUpdateInterval,
+                    Settings.getLocalUpdateSearchIntervalMs());
+        }
     }
 
     @Override
@@ -305,7 +323,42 @@ public class AdvancedFragment extends BasePreferenceFragmentCompat
             ((EhApplication) getActivity().getApplication()).recreate();
             return true;
         }
+        if (KEY_LOCAL_UPDATE_SEARCH_INTERVAL.equals(key)) {
+            EditTextPreference edit = (EditTextPreference) preference;
+            final int millis;
+            try {
+                millis = SearchIntervalPolicy.parseMillis(String.valueOf(newValue));
+            } catch (IllegalArgumentException error) {
+                Toast.makeText(requireContext(),
+                        R.string.settings_advanced_local_update_interval_invalid,
+                        Toast.LENGTH_LONG).show();
+                return false;
+            }
+            String normalized = SearchIntervalPolicy.formatSeconds(millis);
+            if (millis < SearchIntervalPolicy.WARNING_BELOW_MS) {
+                new AlertDialog.Builder(requireContext())
+                        .setTitle(R.string.settings_advanced_local_update_interval_warning_title)
+                        .setMessage(getString(
+                                R.string.settings_advanced_local_update_interval_warning,
+                                normalized))
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                            edit.setText(normalized);
+                            updateIntervalSummary(edit, millis);
+                        })
+                        .show();
+                return false;
+            }
+            updateIntervalSummary(edit, millis);
+            return true;
+        }
         return false;
+    }
+
+    private void updateIntervalSummary(Preference preference, int millis) {
+        preference.setSummary(getString(
+                R.string.settings_advanced_local_update_interval_summary,
+                SearchIntervalPolicy.formatSeconds(millis)));
     }
 
     private class DbSyncHandle extends Handler {

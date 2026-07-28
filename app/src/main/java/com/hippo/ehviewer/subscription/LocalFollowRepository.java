@@ -21,6 +21,9 @@ public final class LocalFollowRepository {
     public static final String SOURCE_BOOKMARK = "QUICK_SEARCH";
     public static final String CHECKPOINT_FOLLOW = "LOCAL_FOLLOW_SYNC";
     public static final String CHECKPOINT_BOOKMARK = "BOOKMARK_SYNC";
+    public static final String CHECKPOINT_FOLLOW_OPEN = "LOCAL_FOLLOW_OPEN";
+    public static final String CHECKPOINT_BOOKMARK_OPEN = "BOOKMARK_OPEN";
+    private static final String SHARED_OPEN_ACCOUNT = "shared";
     public static final String FIXED_CHINESE_SIGNATURE =
             QuerySignatureFactory.create("language:chinese$", true);
     private static final LocalFollowRepository INSTANCE = new LocalFollowRepository();
@@ -228,17 +231,84 @@ public final class LocalFollowRepository {
     }
 
     public void clearState(String sourceType, String sourceKey) {
+        clearStateAt(sourceType, sourceKey, Long.MAX_VALUE);
+    }
+
+    public void clearStateAt(String sourceType, String sourceKey, long snapshotAt) {
         Database db = EhDB.getDatabase();
         db.beginTransaction();
         try {
-            db.execSQL("UPDATE LOCAL_UPDATE_STATE SET COUNT=0,COUNT_STATE='EXACT',ERROR='',CHECKED_AT=? " +
+            db.execSQL("DELETE FROM LOCAL_UNREAD_GALLERY WHERE SOURCE_TYPE=? AND SOURCE_KEY=? " +
+                            "AND DETECTED_AT<=?",
+                    new Object[]{sourceType, sourceKey, snapshotAt});
+            int remaining = unreadCount(db, sourceType, sourceKey);
+            db.execSQL("UPDATE LOCAL_UPDATE_STATE SET COUNT=?,COUNT_STATE='EXACT',ERROR='',CHECKED_AT=? " +
                             "WHERE SOURCE_TYPE=? AND SOURCE_KEY=?",
-                    new Object[]{System.currentTimeMillis(), sourceType, sourceKey});
-            db.execSQL("DELETE FROM LOCAL_UNREAD_GALLERY WHERE SOURCE_TYPE=? AND SOURCE_KEY=?",
-                    new Object[]{sourceType, sourceKey});
+                    new Object[]{remaining, System.currentTimeMillis(), sourceType, sourceKey});
             db.setTransactionSuccessful();
         } finally {
             db.endTransaction();
+        }
+    }
+
+    public long captureUnreadSnapshot(String sourceType, String sourceKey) {
+        try (Cursor cursor = EhDB.getDatabase().rawQuery(
+                "SELECT COALESCE(MAX(rowid),0) FROM LOCAL_UNREAD_GALLERY " +
+                        "WHERE SOURCE_TYPE=? AND SOURCE_KEY=?",
+                new String[]{sourceType, sourceKey})) {
+            return cursor.moveToFirst() ? cursor.getLong(0) : 0;
+        }
+    }
+
+    public FeedBoundary readOpenBoundary(String sourceType, String sourceKey,
+                                         String signature) {
+        String checkpointType = SOURCE_FOLLOW.equals(sourceType)
+                ? CHECKPOINT_FOLLOW_OPEN : CHECKPOINT_BOOKMARK_OPEN;
+        FeedCheckpoint checkpoint = SubscriptionRepository.getInstance().readCheckpoint(
+                new CheckpointKey(SHARED_OPEN_ACCOUNT, checkpointType, sourceKey, signature));
+        if (!checkpoint.current.isEmpty()) return checkpoint.current;
+
+        // One-time compatibility with the pre-v11 local-seen namespaces.
+        String legacyType = SOURCE_FOLLOW.equals(sourceType)
+                ? "SUBSCRIPTION_TAG_SEEN" : "QUICK_SEARCH";
+        FeedCheckpoint legacy = SubscriptionRepository.getInstance()
+                .readLatestCheckpoint(legacyType, sourceKey);
+        return legacy.current;
+    }
+
+    /**
+     * Clears only unread rows present when the list was entered and records the next-entry
+     * marker. The currently displayed page keeps the boundary loaded before this transaction.
+     */
+    public void completeSuccessfulOpen(String sourceType, String sourceKey, String signature,
+                                       FeedBoundary pageTop, long unreadSnapshotRowId) {
+        if (pageTop == null || pageTop.isEmpty()) return;
+        String checkpointType = SOURCE_FOLLOW.equals(sourceType)
+                ? CHECKPOINT_FOLLOW_OPEN : CHECKPOINT_BOOKMARK_OPEN;
+        Database db = EhDB.getDatabase();
+        db.beginTransaction();
+        try {
+            SubscriptionRepository.getInstance().advanceCheckpoint(
+                    new CheckpointKey(SHARED_OPEN_ACCOUNT, checkpointType,
+                            sourceKey, signature), pageTop);
+            db.execSQL("DELETE FROM LOCAL_UNREAD_GALLERY WHERE SOURCE_TYPE=? AND SOURCE_KEY=? " +
+                            "AND rowid<=?",
+                    new Object[]{sourceType, sourceKey, unreadSnapshotRowId});
+            int remaining = unreadCount(db, sourceType, sourceKey);
+            db.execSQL("UPDATE LOCAL_UPDATE_STATE SET COUNT=?,COUNT_STATE='EXACT',ERROR='',CHECKED_AT=? " +
+                            "WHERE SOURCE_TYPE=? AND SOURCE_KEY=?",
+                    new Object[]{remaining, System.currentTimeMillis(), sourceType, sourceKey});
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+    }
+
+    private static int unreadCount(Database db, String sourceType, String sourceKey) {
+        try (Cursor cursor = db.rawQuery(
+                "SELECT COUNT(*) FROM LOCAL_UNREAD_GALLERY WHERE SOURCE_TYPE=? AND SOURCE_KEY=?",
+                new String[]{sourceType, sourceKey})) {
+            return cursor.moveToFirst() ? cursor.getInt(0) : 0;
         }
     }
 
@@ -252,7 +322,7 @@ public final class LocalFollowRepository {
             db.execSQL("DELETE FROM LOCAL_UNREAD_GALLERY WHERE SOURCE_TYPE=? AND SOURCE_KEY=?",
                     new Object[]{SOURCE_BOOKMARK, key});
             db.execSQL("DELETE FROM FEED_CHECKPOINT WHERE SOURCE_TYPE IN " +
-                            "('BOOKMARK_SYNC','QUICK_SEARCH') AND SOURCE_KEY=?",
+                            "('BOOKMARK_SYNC','BOOKMARK_OPEN','QUICK_SEARCH') AND SOURCE_KEY=?",
                     new Object[]{key});
             LocalBaselineQueue.delete(SOURCE_BOOKMARK, key);
             db.setTransactionSuccessful();
@@ -285,6 +355,9 @@ public final class LocalFollowRepository {
             db.execSQL("DELETE FROM FEED_CHECKPOINT WHERE SOURCE_TYPE=? " +
                             "AND SOURCE_KEY=?",
                     new Object[]{CHECKPOINT_BOOKMARK, sourceKey});
+            db.execSQL("DELETE FROM FEED_CHECKPOINT WHERE SOURCE_TYPE=? " +
+                            "AND SOURCE_KEY=?",
+                    new Object[]{CHECKPOINT_BOOKMARK_OPEN, sourceKey});
             db.setTransactionSuccessful();
         } finally {
             db.endTransaction();
@@ -310,6 +383,27 @@ public final class LocalFollowRepository {
         }
         return commitPrepared(sourceType, sourceKey, signature, checkpointKey,
                 boundaryOf(galleries), galleries, forceCapped, boundaryProven);
+    }
+
+    /**
+     * Commits an exact per-item fallback page while keeping its checkpoint aligned with the
+     * shared global scan. A non-empty first page still has to prove the old item boundary; if it
+     * cannot, the result remains a safe 20+ lower bound. An empty successful response proves
+     * that the query currently has no matching galleries.
+     */
+    public TagUpdateState commitSynchronizedPage(
+            String sourceType, String sourceKey, String signature,
+            CheckpointKey checkpointKey, FeedBoundary sharedTop,
+            List<GalleryInfo> galleries) {
+        if (sharedTop == null || sharedTop.isEmpty()) {
+            throw new IllegalArgumentException("empty shared scan boundary");
+        }
+        List<GalleryInfo> safe =
+                galleries == null ? Collections.emptyList() : galleries;
+        FeedBoundary commitTop = GlobalScanPolicy.fallbackCommitBoundary(
+                boundaryOf(safe), sharedTop);
+        return commitPrepared(sourceType, sourceKey, signature, checkpointKey, commitTop,
+                safe, false, safe.isEmpty());
     }
 
     /**
@@ -359,12 +453,14 @@ public final class LocalFollowRepository {
             if (!baseline) {
                 for (Long gid : newGids) {
                     db.execSQL("INSERT OR IGNORE INTO LOCAL_UNREAD_GALLERY" +
-                                    "(SOURCE_TYPE,SOURCE_KEY,GID) VALUES(?,?,?)",
-                            new Object[]{sourceType, sourceKey, gid});
+                                    "(SOURCE_TYPE,SOURCE_KEY,GID,DETECTED_AT) VALUES(?,?,?,?)",
+                            new Object[]{sourceType, sourceKey, gid,
+                                    System.currentTimeMillis()});
                 }
                 db.execSQL("DELETE FROM LOCAL_UNREAD_GALLERY WHERE SOURCE_TYPE=? AND SOURCE_KEY=? " +
                                 "AND GID NOT IN (SELECT GID FROM LOCAL_UNREAD_GALLERY " +
-                                "WHERE SOURCE_TYPE=? AND SOURCE_KEY=? LIMIT 21)",
+                                "WHERE SOURCE_TYPE=? AND SOURCE_KEY=? " +
+                                "ORDER BY DETECTED_AT DESC,GID DESC LIMIT 21)",
                         new Object[]{sourceType, sourceKey, sourceType, sourceKey});
             }
             int count = 0;

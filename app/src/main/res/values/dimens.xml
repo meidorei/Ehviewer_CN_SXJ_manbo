@@ -35,6 +35,8 @@
     <dimen name="text_small">14sp</dimen>
     <dimen name="text_super_small">12sp</dimen>
     <dimen name="text_more_super_small">6sp</dimen>
+    <dimen name="update_badge_count_width">34dp</dimen>
+    <dimen name="update_badge_detail_text_size">12sp</dimen>
 
     <!-- RatingView -->
     <dimen name="rating_size">16dp</dimen>

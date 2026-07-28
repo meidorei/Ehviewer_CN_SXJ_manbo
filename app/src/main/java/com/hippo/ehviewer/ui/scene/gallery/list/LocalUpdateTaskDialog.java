@@ -41,7 +41,11 @@ final class LocalUpdateTaskDialog {
                 .append("状态：").append(snapshot.status)
                 .append("\n类型：").append(snapshot.type)
                 .append("\n方式：").append(method)
+                .append("\n阶段：").append(displayPhase(snapshot))
                 .append("\n来源：").append(snapshot.host)
+                .append("\n请求间隔：")
+                .append(String.format(java.util.Locale.US, "%.1f 秒",
+                        snapshot.requestIntervalMs / 1000d))
                 .append("\n进度：").append(snapshot.index).append('/').append(snapshot.total)
                 .append("\n扫描：").append(snapshot.pages).append(" 页，")
                 .append(snapshot.galleries).append(" 本");
@@ -107,6 +111,14 @@ final class LocalUpdateTaskDialog {
     }
 
     private static String displayMethod(LocalRefreshJobStore.Snapshot snapshot) {
+        if ("FOLLOW".equals(snapshot.type)) {
+            if (LocalUpdateService.METHOD_GLOBAL.equals(snapshot.method)) {
+                return "全局中文扫描";
+            }
+            if (LocalUpdateService.METHOD_TAGS.equals(snapshot.method)) {
+                return "逐标签检查";
+            }
+        }
         if ("BOOKMARK".equals(snapshot.type)) {
             if (LocalUpdateService.METHOD_GLOBAL.equals(snapshot.method)) {
                 return "全局中文扫描";
@@ -116,6 +128,22 @@ final class LocalUpdateTaskDialog {
             }
         }
         return snapshot.method;
+    }
+
+    private static String displayPhase(LocalRefreshJobStore.Snapshot snapshot) {
+        if (LocalRefreshJobStore.PHASE_GLOBAL_SCAN.equals(snapshot.phase)) {
+            return "全局中文扫描";
+        }
+        if (LocalRefreshJobStore.PHASE_FOLLOW_QUEUE.equals(snapshot.phase)) {
+            return "逐标签检查";
+        }
+        if (LocalRefreshJobStore.PHASE_BOOKMARK_QUEUE.equals(snapshot.phase)) {
+            return "逐书签检查";
+        }
+        if (LocalRefreshJobStore.PHASE_BASELINE.equals(snapshot.phase)) {
+            return "建立基线";
+        }
+        return "准备中";
     }
 
     static boolean isOpenTask(@Nullable LocalRefreshJobStore.Snapshot snapshot) {

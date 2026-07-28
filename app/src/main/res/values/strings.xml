@@ -310,6 +310,7 @@
     <string name="delete_quick_search_title">Delete Quick Search</string>
     <string name="delete_quick_search_message">Delete \"%s\"?</string>
     <string name="no_quick_search">Quick search will be shown here</string>
+    <string name="quick_search_no_results">No matching bookmarks</string>
     <string name="add_quick_search_tip">The state of gallery list will be saved as quick search. Perform a search first to save the state of search panel.</string>
     <string name="readme">README</string>
     <string name="image_search_not_quick_search">Can\'t add image search as quick search</string>
@@ -1121,6 +1122,11 @@
     <string name="settings_advanced_export_local_follows_summary">Export only local follow tags as UTF-8 JSON</string>
     <string name="settings_advanced_import_local_follows">Import local follows</string>
     <string name="settings_advanced_import_local_follows_summary">Merge or replace local follow tags from JSON</string>
+    <string name="settings_advanced_local_update_interval">Update-check request interval</string>
+    <string name="settings_advanced_local_update_interval_summary">Current: %1$s seconds · Recommended: 3.2 seconds</string>
+    <string name="settings_advanced_local_update_interval_invalid">Enter 1.0–10.0 seconds with at most one decimal place</string>
+    <string name="settings_advanced_local_update_interval_warning_title">Requests may be too frequent</string>
+    <string name="settings_advanced_local_update_interval_warning">The site permits at most one search every 3 seconds. %1$s seconds may trigger rate limiting. Save anyway?</string>
     <string name="local_follow_export_success">Exported %1$d follow tags</string>
     <string name="local_follow_export_failed">Export failed: %1$s</string>
     <string name="local_follow_import_failed">Import failed: %1$s</string>
@@ -1179,4 +1185,16 @@
     <string name="bookmark_update_method_each_recommended">First page of each bookmark (Recommended)\nUses every bookmark\'s complete query and is best after a long interval.</string>
     <string name="local_update_start">Start check</string>
     <string name="bookmark_check_confirm_with_history">The first page of %1$d bookmarks will be checked in order.\n\n%2$s\n\nYou can pause or stop from the task details.</string>
+    <string name="follow_namespace_artist">Artist</string>
+    <string name="follow_namespace_group">Group</string>
+    <string name="follow_namespace_parody">Parody</string>
+    <string name="follow_namespace_character">Character</string>
+    <string name="follow_namespace_female">Female</string>
+    <string name="follow_namespace_male">Male</string>
+    <string name="follow_namespace_misc">Misc</string>
+    <string name="follow_namespace_language">Language</string>
+    <string name="follow_namespace_cosplayer">Cosplayer</string>
+    <string name="follow_namespace_mixed">Mixed</string>
+    <string name="follow_namespace_other">Other</string>
+    <string name="follow_namespace_reclass">Reclass</string>
 </resources>

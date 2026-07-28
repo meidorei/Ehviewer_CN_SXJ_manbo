@@ -183,6 +183,8 @@ public class EhDB {
                 SubscriptionSchema.createTables(db);
             case 9: // 9 to 10, durable automatic-baseline queue
                 SubscriptionSchema.createTables(db);
+            case 10: // 10 to 11, global scan cursor, open boundary and durable job timing
+                SubscriptionSchema.upgradeToV11(db);
         }
     }
 

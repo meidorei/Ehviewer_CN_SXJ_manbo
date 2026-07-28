@@ -228,6 +228,7 @@
     <string name="delete_quick_search_title">删除书签</string>
     <string name="delete_quick_search_message">删除“%s”？</string>
     <string name="no_quick_search">这里是书签栏</string>
+    <string name="quick_search_no_results">没有匹配的书签</string>
     <string name="add_quick_search_tip">画廊列表的状态将被保存为书签。如果你想保存搜索面板的状态，请先执行搜索。</string>
     <string name="readme">读我</string>
     <string name="image_search_not_quick_search">无法添加图片搜索为书签</string>
@@ -1032,6 +1033,11 @@
     <string name="settings_advanced_export_local_follows_summary">仅将本地追更标签导出为 UTF-8 JSON</string>
     <string name="settings_advanced_import_local_follows">导入追更</string>
     <string name="settings_advanced_import_local_follows_summary">从 JSON 合并或替换本地追更标签</string>
+    <string name="settings_advanced_local_update_interval">更新检查请求间隔</string>
+    <string name="settings_advanced_local_update_interval_summary">当前 %1$s 秒 · 推荐 3.2 秒</string>
+    <string name="settings_advanced_local_update_interval_invalid">请输入 1.0–10.0 秒，最多保留一位小数</string>
+    <string name="settings_advanced_local_update_interval_warning_title">请求可能过于频繁</string>
+    <string name="settings_advanced_local_update_interval_warning">站点限制为每 3 秒最多搜索一次。使用 %1$s 秒可能触发限流，仍要保存吗？</string>
     <string name="local_follow_export_success">已导出 %1$d 个追更标签</string>
     <string name="local_follow_export_failed">导出失败：%1$s</string>
     <string name="local_follow_import_failed">导入失败：%1$s</string>
@@ -1090,4 +1096,16 @@
     <string name="bookmark_update_method_each_recommended">逐书签第一页（推荐）\n使用每个书签的完整查询，适合间隔较久。</string>
     <string name="local_update_start">开始检查</string>
     <string name="bookmark_check_confirm_with_history">将按顺序检查 %1$d 个书签的第一页。\n\n%2$s\n\n检查期间可在任务详情中暂停或停止。</string>
+    <string name="follow_namespace_artist">艺术家</string>
+    <string name="follow_namespace_group">团队</string>
+    <string name="follow_namespace_parody">原作</string>
+    <string name="follow_namespace_character">角色</string>
+    <string name="follow_namespace_female">女性</string>
+    <string name="follow_namespace_male">男性</string>
+    <string name="follow_namespace_misc">杂项</string>
+    <string name="follow_namespace_language">语言</string>
+    <string name="follow_namespace_cosplayer">角色扮演者</string>
+    <string name="follow_namespace_mixed">混合</string>
+    <string name="follow_namespace_other">其他</string>
+    <string name="follow_namespace_reclass">重新分类</string>
 </resources>

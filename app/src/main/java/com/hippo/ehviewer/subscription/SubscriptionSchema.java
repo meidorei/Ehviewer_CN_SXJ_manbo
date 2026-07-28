@@ -59,12 +59,23 @@ public final class SubscriptionSchema {
                     "\"SOURCE_TYPE\" TEXT NOT NULL," +
                     "\"SOURCE_KEY\" TEXT NOT NULL," +
                     "\"GID\" INTEGER NOT NULL," +
+                    "\"DETECTED_AT\" INTEGER NOT NULL DEFAULT 0," +
                     "PRIMARY KEY(\"SOURCE_TYPE\",\"SOURCE_KEY\",\"GID\"))",
+            "CREATE TABLE IF NOT EXISTS \"LOCAL_GLOBAL_CURSOR\" (" +
+                    "\"ACCOUNT_KEY\" TEXT NOT NULL," +
+                    "\"JOB_TYPE\" TEXT NOT NULL," +
+                    "\"QUERY_SIGNATURE\" TEXT NOT NULL," +
+                    "\"CURRENT_TIME\" INTEGER NOT NULL DEFAULT 0," +
+                    "\"CURRENT_GIDS\" TEXT NOT NULL DEFAULT ''," +
+                    "\"UPDATED_AT\" INTEGER NOT NULL DEFAULT 0," +
+                    "PRIMARY KEY(\"ACCOUNT_KEY\",\"JOB_TYPE\",\"QUERY_SIGNATURE\"))",
             "CREATE TABLE IF NOT EXISTS \"LOCAL_REFRESH_JOB\" (" +
                     "\"_id\" INTEGER PRIMARY KEY CHECK(\"_id\"=1)," +
                     "\"JOB_TYPE\" TEXT NOT NULL," +
                     "\"METHOD\" TEXT NOT NULL," +
                     "\"STATUS\" TEXT NOT NULL," +
+                    "\"PHASE\" TEXT NOT NULL DEFAULT 'PREPARING'," +
+                    "\"REQUEST_INTERVAL_MS\" INTEGER NOT NULL DEFAULT 3200," +
                     "\"CURRENT_INDEX\" INTEGER NOT NULL DEFAULT 0," +
                     "\"TOTAL\" INTEGER NOT NULL DEFAULT 0," +
                     "\"PAGES\" INTEGER NOT NULL DEFAULT 0," +
@@ -96,6 +107,7 @@ public final class SubscriptionSchema {
             "DROP TABLE IF EXISTS \"LOCAL_BASELINE_QUEUE\"",
             "DROP TABLE IF EXISTS \"LOCAL_REFRESH_META\"",
             "DROP TABLE IF EXISTS \"LOCAL_REFRESH_JOB\"",
+            "DROP TABLE IF EXISTS \"LOCAL_GLOBAL_CURSOR\"",
             "DROP TABLE IF EXISTS \"LOCAL_UNREAD_GALLERY\"",
             "DROP TABLE IF EXISTS \"LOCAL_UPDATE_STATE\"",
             "DROP TABLE IF EXISTS \"SUBSCRIPTION_TAG_UPDATE_STATE\"",
@@ -112,6 +124,33 @@ public final class SubscriptionSchema {
 
     public static void createTables(SQLiteDatabase db) {
         for (String sql : SQL) db.execSQL(sql);
+    }
+
+    public static void upgradeToV11(SQLiteDatabase db) {
+        createTables(db);
+        if (!hasColumn(db, "LOCAL_UNREAD_GALLERY", "DETECTED_AT")) {
+            db.execSQL("ALTER TABLE \"LOCAL_UNREAD_GALLERY\" ADD COLUMN " +
+                    "\"DETECTED_AT\" INTEGER NOT NULL DEFAULT 0");
+        }
+        if (!hasColumn(db, "LOCAL_REFRESH_JOB", "PHASE")) {
+            db.execSQL("ALTER TABLE \"LOCAL_REFRESH_JOB\" ADD COLUMN " +
+                    "\"PHASE\" TEXT NOT NULL DEFAULT 'PREPARING'");
+        }
+        if (!hasColumn(db, "LOCAL_REFRESH_JOB", "REQUEST_INTERVAL_MS")) {
+            db.execSQL("ALTER TABLE \"LOCAL_REFRESH_JOB\" ADD COLUMN " +
+                    "\"REQUEST_INTERVAL_MS\" INTEGER NOT NULL DEFAULT 3200");
+        }
+    }
+
+    private static boolean hasColumn(SQLiteDatabase db, String table, String column) {
+        try (android.database.Cursor cursor = db.rawQuery(
+                "PRAGMA table_info(\"" + table + "\")", null)) {
+            int nameIndex = cursor.getColumnIndex("name");
+            while (cursor.moveToNext()) {
+                if (column.equalsIgnoreCase(cursor.getString(nameIndex))) return true;
+            }
+        }
+        return false;
     }
 
     public static void dropTables(Database db) {
