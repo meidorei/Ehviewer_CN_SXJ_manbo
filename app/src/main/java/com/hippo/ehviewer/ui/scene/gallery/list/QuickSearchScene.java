@@ -22,12 +22,14 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.NinePatchDrawable;
 import android.os.Bundle;
 import android.view.LayoutInflater;
+import android.view.Menu;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.widget.SearchView;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -42,13 +44,12 @@ import com.hippo.ehviewer.EhDB;
 import com.hippo.ehviewer.R;
 import com.hippo.ehviewer.dao.QuickSearch;
 import com.hippo.ehviewer.ui.scene.ToolbarScene;
-import com.hippo.ehviewer.subscription.SubscriptionRepository;
-import com.hippo.ehviewer.subscription.LocalFollowRepository;
 import com.hippo.util.DrawableManager;
 import com.hippo.view.ViewTransition;
 import com.hippo.lib.yorozuya.AssertUtils;
 import com.hippo.lib.yorozuya.ViewUtils;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public final class QuickSearchScene extends ToolbarScene {
@@ -59,6 +60,8 @@ public final class QuickSearchScene extends ToolbarScene {
      ---------------*/
     @Nullable
     private List<QuickSearch> mQuickSearchList;
+    private final List<QuickSearch> mVisibleQuickSearchList = new ArrayList<>();
+    private String mSearchQuery = "";
 
     /*---------------
      View life cycle
@@ -68,18 +71,23 @@ public final class QuickSearchScene extends ToolbarScene {
     @Nullable
     private ViewTransition mViewTransition;
     @Nullable
+    private TextView mTip;
+    @Nullable
     private RecyclerView.Adapter mAdapter;
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         mQuickSearchList = EhDB.getAllQuickSearch();
+        mVisibleQuickSearchList.clear();
+        mVisibleQuickSearchList.addAll(mQuickSearchList);
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
         mQuickSearchList = null;
+        mVisibleQuickSearchList.clear();
     }
 
     @SuppressWarnings("deprecation")
@@ -90,16 +98,16 @@ public final class QuickSearchScene extends ToolbarScene {
         View view = inflater.inflate(R.layout.scene_label_list, container, false);
 
         mRecyclerView = (EasyRecyclerView) ViewUtils.$$(view, R.id.recycler_view);
-        TextView tip = (TextView) ViewUtils.$$(view, R.id.tip);
-        mViewTransition = new ViewTransition(mRecyclerView, tip);
+        mTip = (TextView) ViewUtils.$$(view, R.id.tip);
+        mViewTransition = new ViewTransition(mRecyclerView, mTip);
 
         Context context = getEHContext();
         AssertUtils.assertNotNull(context);
 
         Drawable drawable = DrawableManager.getVectorDrawable(context, R.drawable.big_search);
         drawable.setBounds(0, 0, drawable.getIntrinsicWidth(), drawable.getIntrinsicHeight());
-        tip.setCompoundDrawables(null, drawable, null, null);
-        tip.setText(R.string.no_quick_search);
+        mTip.setCompoundDrawables(null, drawable, null, null);
+        mTip.setText(R.string.no_quick_search);
 
         // drag & drop manager
         RecyclerViewDragDropManager dragDropManager = new RecyclerViewDragDropManager();
@@ -143,6 +151,33 @@ public final class QuickSearchScene extends ToolbarScene {
         }
 
         mViewTransition = null;
+        mTip = null;
+    }
+
+    @Override
+    public int getMenuResId() {
+        return R.menu.local_follow_management;
+    }
+
+    @Override
+    public void onMenuCreated(Menu menu) {
+        SearchView search = (SearchView) menu.findItem(R.id.action_search).getActionView();
+        search.setQueryHint(getString(R.string.search));
+        search.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+            @Override public boolean onQueryTextSubmit(String query) {
+                filter(query);
+                return true;
+            }
+
+            @Override public boolean onQueryTextChange(String query) {
+                filter(query);
+                return true;
+            }
+        });
+        search.setOnCloseListener(() -> {
+            filter("");
+            return false;
+        });
     }
 
     @Override
@@ -152,12 +187,30 @@ public final class QuickSearchScene extends ToolbarScene {
 
     private void updateView() {
         if (mViewTransition != null) {
-            if (mQuickSearchList != null && mQuickSearchList.size() > 0) {
+            if (!mVisibleQuickSearchList.isEmpty()) {
                 mViewTransition.showView(0);
             } else {
+                if (mTip != null) {
+                    mTip.setText(isFiltering()
+                            ? R.string.quick_search_no_results
+                            : R.string.no_quick_search);
+                }
                 mViewTransition.showView(1);
             }
         }
+    }
+
+    private void filter(String query) {
+        mSearchQuery = query == null ? "" : query.trim();
+        mVisibleQuickSearchList.clear();
+        mVisibleQuickSearchList.addAll(
+                QuickSearchFilter.filter(mQuickSearchList, mSearchQuery));
+        if (mAdapter != null) mAdapter.notifyDataSetChanged();
+        updateView();
+    }
+
+    private boolean isFiltering() {
+        return !mSearchQuery.isEmpty();
     }
 
     private class QuickSearchHolder extends AbstractDraggableItemViewHolder implements View.OnClickListener {
@@ -180,24 +233,23 @@ public final class QuickSearchScene extends ToolbarScene {
         public void onClick(View v) {
             int position = getAdapterPosition();
             Context context = getEHContext();
-            if (position == RecyclerView.NO_POSITION || mQuickSearchList == null) {
+            if (position == RecyclerView.NO_POSITION) {
                 return;
             }
 
-            final QuickSearch quickSearch = mQuickSearchList.get(position);
+            final QuickSearch quickSearch = mVisibleQuickSearchList.get(position);
             new AlertDialog.Builder(context)
                     .setTitle(R.string.delete_quick_search_title)
                     .setMessage(getString(R.string.delete_quick_search_message, quickSearch.name))
+                    .setNegativeButton(android.R.string.cancel, null)
                     .setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
                         @Override
                         public void onClick(DialogInterface dialog, int which) {
-                            EhDB.deleteQuickSearch(quickSearch);
-                            SubscriptionRepository repository = SubscriptionRepository.getInstance();
-                            repository.execute(() -> repository.deleteQuickSearchCheckpoints(
-                                    repository.getAccountKey(), quickSearch.getId()));
-                            repository.execute(() -> LocalFollowRepository.getInstance()
-                                    .deleteBookmarkState(quickSearch.getId()));
-                            mQuickSearchList.remove(position);
+                            QuickSearchDeleteHelper.delete(quickSearch);
+                            if (mQuickSearchList != null) {
+                                mQuickSearchList.remove(quickSearch);
+                            }
+                            mVisibleQuickSearchList.remove(quickSearch);
                         }
                     })
                     .setOnDismissListener(new DialogInterface.OnDismissListener() {
@@ -229,24 +281,24 @@ public final class QuickSearchScene extends ToolbarScene {
 
         @Override
         public void onBindViewHolder(QuickSearchHolder holder, int position) {
-            if (mQuickSearchList != null) {
-                holder.label.setText(mQuickSearchList.get(position).name);
-            }
+            holder.label.setText(mVisibleQuickSearchList.get(position).name);
+            holder.dragHandler.setVisibility(isFiltering() ? View.INVISIBLE : View.VISIBLE);
         }
 
         @Override
         public long getItemId(int position) {
-            return mQuickSearchList != null ? mQuickSearchList.get(position).getId() : 0;
+            Long id = mVisibleQuickSearchList.get(position).getId();
+            return id == null ? 0 : id;
         }
 
         @Override
         public int getItemCount() {
-            return mQuickSearchList != null ? mQuickSearchList.size() : 0;
+            return mVisibleQuickSearchList.size();
         }
 
         @Override
         public boolean onCheckCanStartDrag(QuickSearchHolder holder, int position, int x, int y) {
-            return ViewUtils.isViewUnder(holder.dragHandler, x, y, 0);
+            return !isFiltering() && ViewUtils.isViewUnder(holder.dragHandler, x, y, 0);
         }
 
         @Override
@@ -262,15 +314,20 @@ public final class QuickSearchScene extends ToolbarScene {
             if (null == mQuickSearchList) {
                 return;
             }
+            if (isFiltering()) {
+                return;
+            }
 
             EhDB.moveQuickSearch(fromPosition, toPosition);
             final QuickSearch item = mQuickSearchList.remove(fromPosition);
             mQuickSearchList.add(toPosition, item);
+            mVisibleQuickSearchList.remove(fromPosition);
+            mVisibleQuickSearchList.add(toPosition, item);
         }
 
         @Override
         public boolean onCheckCanDrop(int draggingPosition, int dropPosition) {
-            return true;
+            return !isFiltering();
         }
 
         @Override

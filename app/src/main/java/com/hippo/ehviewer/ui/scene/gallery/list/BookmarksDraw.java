@@ -61,6 +61,7 @@ public class BookmarksDraw {
 
     private ListView listView;
     private Toolbar toolbar;
+    private TextView tip;
     private LocalUpdateToolbarController updateToolbar;
     private List<QuickSearch> bookmarks;
     private final Map<Long, String> updates = new HashMap<>();
@@ -83,7 +84,7 @@ public class BookmarksDraw {
         View bookmarksView = inflater.inflate(R.layout.bookmarks_draw, null, false);
 
         toolbar = (Toolbar) ViewUtils.$$(bookmarksView, R.id.toolbar);
-        final TextView tip = (TextView) ViewUtils.$$(bookmarksView, R.id.tip);
+        tip = (TextView) ViewUtils.$$(bookmarksView, R.id.tip);
         listView = (ListView) ViewUtils.$$(bookmarksView, R.id.list_view);
 
 
@@ -120,13 +121,20 @@ public class BookmarksDraw {
             originalOrder.put(bookmarks.get(i).getId(), i);
         }
         adapter = new ArrayAdapter<QuickSearch>(
-                context, R.layout.item_simple_list, bookmarks) {
+                context, R.layout.item_update_badge_list, bookmarks) {
             @Override public View getView(int position, View convertView, ViewGroup parent) {
-                TextView view = (TextView) super.getView(position, convertView, parent);
+                View view = convertView == null
+                        ? inflater.inflate(R.layout.item_update_badge_list, parent, false)
+                        : convertView;
+                TextView count = view.findViewById(R.id.update_badge_count);
+                TextView indicator = view.findViewById(R.id.update_badge_indicator);
+                TextView label = view.findViewById(R.id.update_badge_label);
+                TextView detail = view.findViewById(R.id.update_badge_detail);
                 QuickSearch item = getItem(position);
                 String badge = item == null ? null : updates.get(item.getId());
-                view.setText(item == null ? ""
-                        : UpdateBadgeFormatter.format(context, item.name, badge));
+                UpdateBadgeFormatter.bind(context, count, indicator, label, detail,
+                        item == null ? "" : item.name, badge,
+                        item == null ? "" : item.keyword);
                 return view;
             }
         };
@@ -149,9 +157,15 @@ public class BookmarksDraw {
         listView.setOnItemLongClickListener((parent, view1, position, id) -> {
             QuickSearch search = bookmarks.get(position);
             new AlertDialog.Builder(context)
-                    .setTitle(search.name)
-                    .setItems(new String[]{context.getString(R.string.bookmark_check_this)},
+                    .setCustomTitle(createActionTitle(search))
+                    .setItems(new String[]{
+                                    context.getString(R.string.bookmark_check_this),
+                                    context.getString(R.string.delete_quick_search_title)},
                             (dialog, which) -> {
+                                if (which == 1) {
+                                    confirmDelete(search);
+                                    return;
+                                }
                                 if (LocalUpdateTaskDialog.isOpenTask(
                                         LocalRefreshJobStore.read())) {
                                     showJobDetails();
@@ -196,12 +210,8 @@ public class BookmarksDraw {
             return true;
         });
 
-        if (bookmarks.isEmpty()) {
-            tip.setVisibility(View.VISIBLE);
-            listView.setVisibility(View.GONE);
-        } else {
-            tip.setVisibility(View.GONE);
-            listView.setVisibility(View.VISIBLE);
+        updateEmptyState();
+        if (!bookmarks.isEmpty()) {
             resume();
         }
 
@@ -269,6 +279,47 @@ public class BookmarksDraw {
         LocalRefreshJobStore.Snapshot snapshot = LocalRefreshJobStore.read();
         if (snapshot == null) return;
         LocalUpdateTaskDialog.show(context, snapshot, true);
+    }
+
+    private void confirmDelete(QuickSearch search) {
+        new AlertDialog.Builder(context)
+                .setTitle(R.string.delete_quick_search_title)
+                .setMessage(context.getString(R.string.delete_quick_search_message, search.name))
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(android.R.string.ok, (dialog, which) -> deleteBookmark(search))
+                .show();
+    }
+
+    private View createActionTitle(QuickSearch search) {
+        View title = inflater.inflate(R.layout.dialog_quick_search_action_title, null, false);
+        TextView name = title.findViewById(R.id.quick_search_action_title);
+        TextView detail = title.findViewById(R.id.quick_search_action_detail);
+        name.setText(search.name);
+        if (search.keyword == null || search.keyword.isEmpty()) {
+            detail.setVisibility(View.GONE);
+        } else {
+            detail.setText(search.keyword);
+            detail.setVisibility(View.VISIBLE);
+        }
+        return title;
+    }
+
+    private void deleteBookmark(QuickSearch search) {
+        QuickSearchDeleteHelper.delete(search);
+        bookmarks.remove(search);
+        if (search.getId() != null) {
+            updates.remove(search.getId());
+            originalOrder.remove(search.getId());
+        }
+        adapter.notifyDataSetChanged();
+        updateEmptyState();
+    }
+
+    private void updateEmptyState() {
+        if (tip == null || listView == null || bookmarks == null) return;
+        boolean empty = bookmarks.isEmpty();
+        tip.setVisibility(empty ? View.VISIBLE : View.GONE);
+        listView.setVisibility(empty ? View.GONE : View.VISIBLE);
     }
 
     private void requestBookmarkRefresh() {

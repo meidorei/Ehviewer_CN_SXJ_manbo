@@ -21,7 +21,7 @@
 
 - [x] 为追更和书签增加全局扫描、逐项检查及任务暂停/停止
 
-- [ ] 书签和追更长按可删除，二次确认，有新增内容对齐
+- [x] 书签长按可二次确认删除，书签与追更新内容数量和状态圆点统一对齐，并在名称下方显示灰色原始查询
 
 - [ ] 书签栏没有转换：
 
@@ -62,7 +62,7 @@
 
 - applicationId：`com.xjs.ehviewer.debug`
 - versionName：`2.0.2.4`
-- versionCode：`121`
+- versionCode：`126`
 - 正式版 versionCode 仍为 `112`
 
 Windows：

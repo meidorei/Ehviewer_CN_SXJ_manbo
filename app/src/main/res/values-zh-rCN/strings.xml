@@ -228,6 +228,7 @@
     <string name="delete_quick_search_title">删除书签</string>
     <string name="delete_quick_search_message">删除“%s”？</string>
     <string name="no_quick_search">这里是书签栏</string>
+    <string name="quick_search_no_results">没有匹配的书签</string>
     <string name="add_quick_search_tip">画廊列表的状态将被保存为书签。如果你想保存搜索面板的状态，请先执行搜索。</string>
     <string name="readme">读我</string>
     <string name="image_search_not_quick_search">无法添加图片搜索为书签</string>
@@ -1095,4 +1096,16 @@
     <string name="bookmark_update_method_each_recommended">逐书签第一页（推荐）\n使用每个书签的完整查询，适合间隔较久。</string>
     <string name="local_update_start">开始检查</string>
     <string name="bookmark_check_confirm_with_history">将按顺序检查 %1$d 个书签的第一页。\n\n%2$s\n\n检查期间可在任务详情中暂停或停止。</string>
+    <string name="follow_namespace_artist">艺术家</string>
+    <string name="follow_namespace_group">团队</string>
+    <string name="follow_namespace_parody">原作</string>
+    <string name="follow_namespace_character">角色</string>
+    <string name="follow_namespace_female">女性</string>
+    <string name="follow_namespace_male">男性</string>
+    <string name="follow_namespace_misc">杂项</string>
+    <string name="follow_namespace_language">语言</string>
+    <string name="follow_namespace_cosplayer">角色扮演者</string>
+    <string name="follow_namespace_mixed">混合</string>
+    <string name="follow_namespace_other">其他</string>
+    <string name="follow_namespace_reclass">重新分类</string>
 </resources>
