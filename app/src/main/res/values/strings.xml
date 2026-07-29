@@ -1141,6 +1141,9 @@
     <string name="settings_advanced_local_update_interval_invalid">Enter 1.0–10.0 seconds with at most one decimal place</string>
     <string name="settings_advanced_local_update_interval_warning_title">Requests may be too frequent</string>
     <string name="settings_advanced_local_update_interval_warning">The site permits at most one search every 3 seconds. %1$s seconds may trigger rate limiting. Save anyway?</string>
+    <string name="settings_advanced_global_scan_page_limit">Global scan page limit</string>
+    <string name="settings_advanced_global_scan_page_limit_summary">Current: %1$d pages · Allowed: 1–300 pages</string>
+    <string name="settings_advanced_global_scan_page_limit_invalid">Enter a whole number from 1 to 300</string>
     <string name="local_follow_export_success">Exported %1$d follow tags</string>
     <string name="local_follow_export_failed">Export failed: %1$s</string>
     <string name="local_follow_import_failed">Import failed: %1$s</string>
@@ -1188,13 +1191,13 @@
     <string name="local_update_no_full_success">No completed successful check yet</string>
     <string name="local_update_last_full_success">Last completed successful check: %1$s</string>
     <string name="local_update_last_full_attempt">Last full check: %1$s</string>
-    <string name="local_update_method_global">Global Chinese scan\nScan up to 30 pages; uncovered tags automatically fall back to a per-tag check.</string>
-    <string name="local_update_method_global_recommended">Global Chinese scan (Recommended)\nScan up to 30 pages; uncovered tags automatically fall back to a per-tag check.</string>
+    <string name="local_update_method_global">Global Chinese scan\nScan up to %1$d pages; uncovered tags automatically fall back to a per-tag check.</string>
+    <string name="local_update_method_global_recommended">Global Chinese scan (Recommended)\nScan up to %1$d pages; uncovered tags automatically fall back to a per-tag check.</string>
     <string name="local_update_method_tags">First page of each tag\nBest after a long interval; a boundary not found on page one is recorded as 20+.</string>
     <string name="local_update_method_tags_recommended">First page of each tag (Recommended)\nBest after a long interval; a boundary not found on page one is recorded as 20+.</string>
     <string name="bookmark_update_history">%1$d bookmarks to check\n%2$s</string>
-    <string name="bookmark_update_method_global">Global Chinese scan\nScan up to 30 pages; complex keywords automatically fall back to the first page of that bookmark.</string>
-    <string name="bookmark_update_method_global_recommended">Global Chinese scan (Recommended)\nScan up to 30 pages; complex keywords automatically fall back to the first page of that bookmark.</string>
+    <string name="bookmark_update_method_global">Global Chinese scan\nScan up to %1$d pages; complex keywords automatically fall back to the first page of that bookmark.</string>
+    <string name="bookmark_update_method_global_recommended">Global Chinese scan (Recommended)\nScan up to %1$d pages; complex keywords automatically fall back to the first page of that bookmark.</string>
     <string name="bookmark_update_method_each">First page of each bookmark\nUses every bookmark\'s complete query and is best after a long interval.</string>
     <string name="bookmark_update_method_each_recommended">First page of each bookmark (Recommended)\nUses every bookmark\'s complete query and is best after a long interval.</string>
     <string name="local_update_start">Start check</string>

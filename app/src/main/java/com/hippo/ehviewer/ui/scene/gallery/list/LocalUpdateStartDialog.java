@@ -17,6 +17,7 @@ import android.widget.TextView;
 import androidx.appcompat.app.AlertDialog;
 
 import com.hippo.ehviewer.R;
+import com.hippo.ehviewer.Settings;
 import com.hippo.ehviewer.subscription.LocalRefreshJobStore;
 import com.hippo.ehviewer.subscription.LocalRefreshStatusFormatter;
 import com.hippo.ehviewer.subscription.LocalUpdateService;
@@ -37,6 +38,7 @@ final class LocalUpdateStartDialog {
         RadioGroup methods = content.findViewById(R.id.local_update_methods);
         RadioButton global = content.findViewById(R.id.local_update_method_global);
         RadioButton tags = content.findViewById(R.id.local_update_method_tags);
+        int pageLimit = Settings.getGlobalScanPageLimit();
 
         history.setText(lastSuccess <= 0
                 ? context.getString(R.string.local_update_no_full_success)
@@ -45,7 +47,7 @@ final class LocalUpdateStartDialog {
                         lastSuccess, System.currentTimeMillis())));
         setMethodText(context, global, recommendGlobal
                 ? R.string.local_update_method_global_recommended
-                : R.string.local_update_method_global);
+                : R.string.local_update_method_global, pageLimit);
         setMethodText(context, tags, recommendGlobal
                 ? R.string.local_update_method_tags
                 : R.string.local_update_method_tags_recommended);
@@ -64,8 +66,9 @@ final class LocalUpdateStartDialog {
                 .show();
     }
 
-    private static void setMethodText(Context context, RadioButton button, int stringId) {
-        String value = context.getString(stringId);
+    private static void setMethodText(Context context, RadioButton button, int stringId,
+                                      Object... formatArgs) {
+        String value = context.getString(stringId, formatArgs);
         SpannableString styled = new SpannableString(value);
         int separator = value.indexOf('\n');
         int titleEnd = separator < 0 ? value.length() : separator;
@@ -93,6 +96,7 @@ final class LocalUpdateStartDialog {
         RadioGroup methods = content.findViewById(R.id.local_update_methods);
         RadioButton global = content.findViewById(R.id.local_update_method_global);
         RadioButton bookmarks = content.findViewById(R.id.local_update_method_tags);
+        int pageLimit = Settings.getGlobalScanPageLimit();
 
         String last = lastSuccess <= 0
                 ? context.getString(R.string.local_update_no_full_success)
@@ -102,7 +106,7 @@ final class LocalUpdateStartDialog {
         history.setText(context.getString(R.string.bookmark_update_history, count, last));
         setMethodText(context, global, recommendGlobal
                 ? R.string.bookmark_update_method_global_recommended
-                : R.string.bookmark_update_method_global);
+                : R.string.bookmark_update_method_global, pageLimit);
         setMethodText(context, bookmarks, recommendGlobal
                 ? R.string.bookmark_update_method_each
                 : R.string.bookmark_update_method_each_recommended);

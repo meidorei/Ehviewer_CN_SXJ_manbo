@@ -39,6 +39,7 @@ import com.hippo.ehviewer.EhApplication;
 import com.hippo.ehviewer.EhDB;
 import com.hippo.ehviewer.R;
 import com.hippo.ehviewer.Settings;
+import com.hippo.ehviewer.subscription.GlobalScanPageLimitPolicy;
 import com.hippo.ehviewer.subscription.LocalFollowJson;
 import com.hippo.ehviewer.subscription.LocalFollowRepository;
 import com.hippo.ehviewer.subscription.LocalUpdateService;
@@ -71,6 +72,8 @@ public class AdvancedFragment extends BasePreferenceFragmentCompat
     private static final String KEY_IMPORT_LOCAL_FOLLOWS = "import_local_follows";
     private static final String KEY_LOCAL_UPDATE_SEARCH_INTERVAL =
             Settings.KEY_LOCAL_UPDATE_SEARCH_INTERVAL;
+    private static final String KEY_GLOBAL_SCAN_PAGE_LIMIT =
+            Settings.KEY_GLOBAL_SCAN_PAGE_LIMIT;
     private static final String KEY_WIFI_SERVER = "wifi_server";
     private static final String KEY_WIFI_CLIENT = "wifi_client";
     private static final int REQUEST_EXPORT_LOCAL_FOLLOWS = 4101;
@@ -93,6 +96,8 @@ public class AdvancedFragment extends BasePreferenceFragmentCompat
         Preference importLocalFollows = findPreference(KEY_IMPORT_LOCAL_FOLLOWS);
         EditTextPreference localUpdateInterval =
                 findPreference(KEY_LOCAL_UPDATE_SEARCH_INTERVAL);
+        EditTextPreference globalScanPageLimit =
+                findPreference(KEY_GLOBAL_SCAN_PAGE_LIMIT);
         Preference socketData = findPreference(KEY_WIFI_SERVER);
         Preference clientData = findPreference(KEY_WIFI_CLIENT);
 
@@ -114,6 +119,15 @@ public class AdvancedFragment extends BasePreferenceFragmentCompat
             localUpdateInterval.setOnPreferenceChangeListener(this);
             updateIntervalSummary(localUpdateInterval,
                     Settings.getLocalUpdateSearchIntervalMs());
+        }
+        if (globalScanPageLimit != null) {
+            globalScanPageLimit.setOnBindEditTextListener(editText -> {
+                editText.setSingleLine(true);
+                editText.setInputType(InputType.TYPE_CLASS_NUMBER);
+            });
+            globalScanPageLimit.setOnPreferenceChangeListener(this);
+            updateGlobalScanPageLimitSummary(globalScanPageLimit,
+                    Settings.getGlobalScanPageLimit());
         }
     }
 
@@ -352,6 +366,25 @@ public class AdvancedFragment extends BasePreferenceFragmentCompat
             updateIntervalSummary(edit, millis);
             return true;
         }
+        if (KEY_GLOBAL_SCAN_PAGE_LIMIT.equals(key)) {
+            EditTextPreference edit = (EditTextPreference) preference;
+            final int pages;
+            try {
+                pages = GlobalScanPageLimitPolicy.parsePages(String.valueOf(newValue));
+            } catch (IllegalArgumentException error) {
+                Toast.makeText(requireContext(),
+                        R.string.settings_advanced_global_scan_page_limit_invalid,
+                        Toast.LENGTH_LONG).show();
+                return false;
+            }
+            String normalized = Integer.toString(pages);
+            updateGlobalScanPageLimitSummary(edit, pages);
+            if (!normalized.equals(String.valueOf(newValue).trim())) {
+                edit.setText(normalized);
+                return false;
+            }
+            return true;
+        }
         return false;
     }
 
@@ -359,6 +392,11 @@ public class AdvancedFragment extends BasePreferenceFragmentCompat
         preference.setSummary(getString(
                 R.string.settings_advanced_local_update_interval_summary,
                 SearchIntervalPolicy.formatSeconds(millis)));
+    }
+
+    private void updateGlobalScanPageLimitSummary(Preference preference, int pages) {
+        preference.setSummary(getString(
+                R.string.settings_advanced_global_scan_page_limit_summary, pages));
     }
 
     private class DbSyncHandle extends Handler {

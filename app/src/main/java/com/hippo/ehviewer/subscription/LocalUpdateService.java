@@ -453,13 +453,13 @@ public final class LocalUpdateService extends Service {
         notifyListeners();
         if (tags.isEmpty()) throw new IllegalStateException("追更列表为空");
         if (METHOD_GLOBAL.equals(method)) {
-            runGlobal(tags, host);
+            runGlobal(tags, host, Settings.getGlobalScanPageLimit());
         } else {
             runTagQueue(tags, host, resumeIndex);
         }
     }
 
-    private void runGlobal(List<String> tags, String host) throws Throwable {
+    private void runGlobal(List<String> tags, String host, int pageLimit) throws Throwable {
         LocalRefreshJobStore.phase(LocalRefreshJobStore.PHASE_GLOBAL_SCAN);
         String contextKey = sourceContext(effectiveHost);
         Map<String, FeedCheckpoint> old = new HashMap<>();
@@ -490,7 +490,7 @@ public final class LocalUpdateService extends Service {
         int pages = 0;
         int galleries = 0;
         boolean reachedGlobalCursor = false;
-        while (url != null && pages < 30 && !shouldStop()) {
+        while (url != null && pages < pageLimit && !shouldStop()) {
             String requestedUrl = url;
             GalleryListParser.Result page = fetchPage(requestedUrl, ListUrlBuilder.MODE_NORMAL);
             if (shouldStop()) return;
@@ -539,7 +539,7 @@ public final class LocalUpdateService extends Service {
             }
             LocalRefreshJobStore.progress(0, pages, galleries, "", "");
             updateNotification("全局扫描：" + pages + " 页 · " + galleries + " 本",
-                    pages, 30, true);
+                    pages, pageLimit, true);
             notifyListeners();
             if (firstSource || reachedGlobalCursor) break;
             url = resolveNext(url, page.nextHref);
@@ -684,13 +684,14 @@ public final class LocalUpdateService extends Service {
         notifyListeners();
         if (jobs.isEmpty()) throw new IllegalStateException("书签列表为空");
         if (onlyId == null && METHOD_GLOBAL.equals(method)) {
-            runGlobalBookmarks(jobs, host);
+            runGlobalBookmarks(jobs, host, Settings.getGlobalScanPageLimit());
         } else {
             runBookmarkQueue(jobs, host, resumeIndex, 0, jobs.size());
         }
     }
 
-    private void runGlobalBookmarks(List<QuickSearch> jobs, String host) throws Throwable {
+    private void runGlobalBookmarks(List<QuickSearch> jobs, String host,
+                                    int pageLimit) throws Throwable {
         LocalRefreshJobStore.phase(LocalRefreshJobStore.PHASE_GLOBAL_SCAN);
         List<GlobalBookmark> exact = new ArrayList<>();
         LinkedHashMap<Long, QuickSearch> complexFallback = new LinkedHashMap<>();
@@ -738,7 +739,7 @@ public final class LocalUpdateService extends Service {
         int pages = 0;
         int galleries = 0;
         boolean reachedGlobalCursor = false;
-        while (!exact.isEmpty() && url != null && pages < 30 && !shouldStop()) {
+        while (!exact.isEmpty() && url != null && pages < pageLimit && !shouldStop()) {
             String requestedUrl = url;
             GalleryListParser.Result page = fetchPage(requestedUrl, ListUrlBuilder.MODE_NORMAL);
             throwIfStopRequested();
@@ -785,7 +786,7 @@ public final class LocalUpdateService extends Service {
             }
             LocalRefreshJobStore.progress(completed, pages, galleries, "", "");
             updateNotification("书签全局扫描：" + pages + " 页 · " + galleries + " 本",
-                    pages, 30, true);
+                    pages, pageLimit, true);
             notifyListeners();
             if (firstSource || reachedGlobalCursor) break;
             url = resolveNext(url, page.nextHref);

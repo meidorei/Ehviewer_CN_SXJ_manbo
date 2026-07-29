@@ -1052,6 +1052,9 @@
     <string name="settings_advanced_local_update_interval_invalid">请输入 1.0–10.0 秒，最多保留一位小数</string>
     <string name="settings_advanced_local_update_interval_warning_title">请求可能过于频繁</string>
     <string name="settings_advanced_local_update_interval_warning">站点限制为每 3 秒最多搜索一次。使用 %1$s 秒可能触发限流，仍要保存吗？</string>
+    <string name="settings_advanced_global_scan_page_limit">全局扫描页数上限</string>
+    <string name="settings_advanced_global_scan_page_limit_summary">当前 %1$d 页 · 可设置 1–300 页</string>
+    <string name="settings_advanced_global_scan_page_limit_invalid">请输入 1–300 之间的整数</string>
     <string name="local_follow_export_success">已导出 %1$d 个追更标签</string>
     <string name="local_follow_export_failed">导出失败：%1$s</string>
     <string name="local_follow_import_failed">导入失败：%1$s</string>
@@ -1099,13 +1102,13 @@
     <string name="local_update_no_full_success">尚无完整成功检查记录</string>
     <string name="local_update_last_full_success">上次完整成功检查：%1$s</string>
     <string name="local_update_last_full_attempt">上次完整检查：%1$s</string>
-    <string name="local_update_method_global">全局中文扫描\n最多扫描 30 页，未覆盖的标签会自动改为逐标签检查。</string>
-    <string name="local_update_method_global_recommended">全局中文扫描（推荐）\n最多扫描 30 页，未覆盖的标签会自动改为逐标签检查。</string>
+    <string name="local_update_method_global">全局中文扫描\n最多扫描 %1$d 页，未覆盖的标签会自动改为逐标签检查。</string>
+    <string name="local_update_method_global_recommended">全局中文扫描（推荐）\n最多扫描 %1$d 页，未覆盖的标签会自动改为逐标签检查。</string>
     <string name="local_update_method_tags">逐标签第一页\n适合间隔较久；第一页未找到旧边界时记为 20+。</string>
     <string name="local_update_method_tags_recommended">逐标签第一页（推荐）\n适合间隔较久；第一页未找到旧边界时记为 20+。</string>
     <string name="bookmark_update_history">待检查 %1$d 个书签\n%2$s</string>
-    <string name="bookmark_update_method_global">全局中文扫描\n最多扫描 30 页；复杂关键词会自动改为逐书签第一页。</string>
-    <string name="bookmark_update_method_global_recommended">全局中文扫描（推荐）\n最多扫描 30 页；复杂关键词会自动改为逐书签第一页。</string>
+    <string name="bookmark_update_method_global">全局中文扫描\n最多扫描 %1$d 页；复杂关键词会自动改为逐书签第一页。</string>
+    <string name="bookmark_update_method_global_recommended">全局中文扫描（推荐）\n最多扫描 %1$d 页；复杂关键词会自动改为逐书签第一页。</string>
     <string name="bookmark_update_method_each">逐书签第一页\n使用每个书签的完整查询，适合间隔较久。</string>
     <string name="bookmark_update_method_each_recommended">逐书签第一页（推荐）\n使用每个书签的完整查询，适合间隔较久。</string>
     <string name="local_update_start">开始检查</string>

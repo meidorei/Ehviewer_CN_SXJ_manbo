@@ -36,6 +36,7 @@ import com.hippo.ehviewer.reader.AutoTransferInterval;
 import com.hippo.ehviewer.client.EhUtils;
 import com.hippo.ehviewer.client.data.FavListUrlBuilder;
 import com.hippo.ehviewer.client.data.GalleryInfo;
+import com.hippo.ehviewer.subscription.GlobalScanPageLimitPolicy;
 import com.hippo.ehviewer.ui.CommonOperations;
 import com.hippo.ehviewer.ui.scene.gallery.list.GalleryListScene;
 import com.hippo.ehviewer.subscription.SearchIntervalPolicy;
@@ -182,6 +183,8 @@ public class Settings {
     private static final String KEY_GALLERY_LIST_DRAWER_PAGE = "gallery_list_drawer_page";
     public static final String KEY_LOCAL_UPDATE_SEARCH_INTERVAL =
             "local_update_search_interval";
+    public static final String KEY_GLOBAL_SCAN_PAGE_LIMIT =
+            "global_scan_page_limit";
 
     public static boolean getAutoAppendChinese() {
         return getBoolean(KEY_AUTO_APPEND_CHINESE, false);
@@ -204,6 +207,16 @@ public class Settings {
     public static void putLocalUpdateSearchIntervalMs(int millis) {
         putString(KEY_LOCAL_UPDATE_SEARCH_INTERVAL,
                 SearchIntervalPolicy.formatSeconds(millis));
+    }
+
+    public static int getGlobalScanPageLimit() {
+        String stored = getString(KEY_GLOBAL_SCAN_PAGE_LIMIT,
+                Integer.toString(GlobalScanPageLimitPolicy.DEFAULT_PAGES));
+        try {
+            return GlobalScanPageLimitPolicy.parsePages(stored);
+        } catch (IllegalArgumentException ignored) {
+            return GlobalScanPageLimitPolicy.DEFAULT_PAGES;
+        }
     }
 
     public static int getGalleryListDrawerPage() {

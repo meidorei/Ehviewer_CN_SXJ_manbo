@@ -138,6 +138,13 @@
         android:title="@string/settings_advanced_local_update_interval"
         app:allowDividerAbove="true" />
 
+    <androidx.preference.EditTextPreference
+        android:defaultValue="30"
+        android:dialogTitle="@string/settings_advanced_global_scan_page_limit"
+        android:key="global_scan_page_limit"
+        android:singleLine="true"
+        android:title="@string/settings_advanced_global_scan_page_limit" />
+
     <Preference
         android:key="wifi_server"
         android:summary="@string/settings_advanced_wifi_sander_summary"
