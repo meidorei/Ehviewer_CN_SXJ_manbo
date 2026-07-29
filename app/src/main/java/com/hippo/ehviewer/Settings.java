@@ -32,6 +32,7 @@ import androidx.annotation.Nullable;
 
 import com.alibaba.fastjson.JSONObject;
 import com.hippo.ehviewer.client.EhConfig;
+import com.hippo.ehviewer.reader.AutoTransferInterval;
 import com.hippo.ehviewer.client.EhUtils;
 import com.hippo.ehviewer.client.data.FavListUrlBuilder;
 import com.hippo.ehviewer.client.data.GalleryInfo;
@@ -627,13 +628,36 @@ public class Settings {
 
     private static final String KEY_START_TRANSFER_TIME = "start_transfer_time";
     private static final int DEFAULT_START_TRANSFER_TIME = 2;
+    private static final String KEY_AUTO_TRANSFER_INTERVAL_MILLIS =
+            "auto_transfer_interval_millis";
 
-    public static int getStartTransferTime() {
-        return getInt(KEY_START_TRANSFER_TIME, DEFAULT_START_TRANSFER_TIME);
+    public static int getAutoTransferIntervalMillis() {
+        if (sSettingsPre.contains(KEY_AUTO_TRANSFER_INTERVAL_MILLIS)) {
+            return AutoTransferInterval.normalize(getInt(
+                    KEY_AUTO_TRANSFER_INTERVAL_MILLIS,
+                    AutoTransferInterval.DEFAULT_MILLIS));
+        }
+        int legacySeconds = getInt(KEY_START_TRANSFER_TIME, DEFAULT_START_TRANSFER_TIME);
+        int migrated = AutoTransferInterval.migrateLegacySeconds(legacySeconds);
+        putInt(KEY_AUTO_TRANSFER_INTERVAL_MILLIS, migrated);
+        return migrated;
     }
 
-    public static void putStartTransferTime(int value) {
-        putInt(KEY_START_TRANSFER_TIME, value);
+    public static void putAutoTransferIntervalMillis(int millis) {
+        putInt(KEY_AUTO_TRANSFER_INTERVAL_MILLIS, AutoTransferInterval.normalize(millis));
+    }
+
+    private static final String KEY_DOWNLOAD_CONTINUOUS_READING =
+            "download_continuous_reading";
+    private static final boolean DEFAULT_DOWNLOAD_CONTINUOUS_READING = true;
+
+    public static boolean getDownloadContinuousReading() {
+        return getBoolean(KEY_DOWNLOAD_CONTINUOUS_READING,
+                DEFAULT_DOWNLOAD_CONTINUOUS_READING);
+    }
+
+    public static void putDownloadContinuousReading(boolean value) {
+        putBoolean(KEY_DOWNLOAD_CONTINUOUS_READING, value);
     }
 
     private static final String KEY_KEEP_SCREEN_ON = "keep_screen_on";

@@ -180,6 +180,12 @@
                 android:resource="@xml/s_pen_actions" />
         </activity>
         <activity
+            android:name=".ui.DownloadGalleryActivity"
+            android:configChanges="screenSize|uiMode"
+            android:exported="false"
+            android:launchMode="standard"
+            android:theme="@style/AppTheme.Gallery" />
+        <activity
             android:name=".ui.SettingsActivity"
             android:configChanges="screenSize|uiMode"
             android:theme="@style/AppTheme.Settings" />

@@ -75,6 +75,8 @@ class PagerLayoutManager extends GalleryView.LayoutManager {
     private int mDeltaY;
     private boolean mCanScrollBetweenPages = false;
     private boolean mStopAnimationFinger;
+    private boolean mGestureStartedAtReadingEnd;
+    private boolean mReadingEndAttemptSent;
 
     private int mInterval;
 
@@ -129,6 +131,8 @@ class PagerLayoutManager extends GalleryView.LayoutManager {
         mDeltaY = 0;
         mCanScrollBetweenPages = false;
         mStopAnimationFinger = false;
+        mGestureStartedAtReadingEnd = false;
+        mReadingEndAttemptSent = false;
     }
 
     private boolean cancelAllAnimations() {
@@ -427,10 +431,16 @@ class PagerLayoutManager extends GalleryView.LayoutManager {
         mDeltaX = 0;
         mDeltaY = 0;
         mStopAnimationFinger = cancelAllAnimations();
+        mGestureStartedAtReadingEnd = mAdapter != null
+                && mCurrent != null
+                && mIndex >= mAdapter.size() - 1;
+        mReadingEndAttemptSent = false;
     }
 
     @Override
     public void onUp() {
+        mGestureStartedAtReadingEnd = false;
+        mReadingEndAttemptSent = false;
         mGalleryView.getEdgeView().onRelease();
 
         if (mCurrent == null) {
@@ -626,13 +636,14 @@ class PagerLayoutManager extends GalleryView.LayoutManager {
         }
     }
 
-    public void scrollInternal(float dx, float dy, float x, float y) {
+    public boolean scrollInternal(float dx, float dy, float x, float y) {
         if (mCurrent == null) {
-            return;
+            return false;
         }
 
         boolean needFill = false;
         boolean canImageScroll = true;
+        boolean readingEndAttempt = false;
         int remainX = (int) dx;
         int remainY = (int) dy;
 
@@ -653,6 +664,11 @@ class PagerLayoutManager extends GalleryView.LayoutManager {
                     (getLeftPage() == null && mOffset == 0 && remainX < 0) ||
                     (getRightPage() == null && mOffset == 0 && remainX > 0)) {
                 // On edge
+                if ((mMode == MODE_LEFT_TO_RIGHT && getRightPage() == null && remainX > 0)
+                        || (mMode == MODE_RIGHT_TO_LEFT
+                        && getLeftPage() == null && remainX < 0)) {
+                    readingEndAttempt = true;
+                }
                 overScrollEdge(remainX, remainY, x, y);
                 remainX = 0;
                 remainY = 0;
@@ -673,11 +689,17 @@ class PagerLayoutManager extends GalleryView.LayoutManager {
         if (needFill) {
             mGalleryView.requestFill();
         }
+        return readingEndAttempt;
     }
 
     @Override
     public void onScroll(float dx, float dy, float totalX, float totalY, float x, float y) {
-        scrollInternal(dx, dy, x, y);
+        boolean readingEndAttempt = scrollInternal(dx, dy, x, y);
+        if (readingEndAttempt && mGestureStartedAtReadingEnd
+                && !mReadingEndAttemptSent) {
+            mReadingEndAttemptSent = true;
+            mGalleryView.onReadingEndAttempt();
+        }
     }
 
     @Override
@@ -747,7 +769,7 @@ class PagerLayoutManager extends GalleryView.LayoutManager {
         } else {
             if (mIndex >= size - 1) {
                 mOverScroller.overScroll(GLEdgeView.LEFT);
-                mGalleryView.onTransferEnd();
+                mGalleryView.onReadingEndAttempt();
             } else {
                 setCurrentIndex(mIndex + 1);
             }
@@ -764,7 +786,7 @@ class PagerLayoutManager extends GalleryView.LayoutManager {
         if (mMode == MODE_LEFT_TO_RIGHT) {
             if (mIndex >= size - 1) {
                 mOverScroller.overScroll(GLEdgeView.RIGHT);
-                mGalleryView.onTransferEnd();
+                mGalleryView.onReadingEndAttempt();
             } else {
                 setCurrentIndex(mIndex + 1);
             }

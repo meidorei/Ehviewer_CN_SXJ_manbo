@@ -1128,11 +1128,11 @@ public final class GalleryView extends GLView implements GestureRecognizer.Liste
         mErrorViewCache = errorView;
     }
 
-    public void onTransferEnd(){
-        if (mListener==null){
+    public void onReadingEndAttempt() {
+        if (mListener == null) {
             return;
         }
-        mListener.onAutoTransferDone();
+        mListener.onReadingEndAttempt();
     }
 
     public static abstract class Adapter {
@@ -1247,6 +1247,6 @@ public final class GalleryView extends GLView implements GestureRecognizer.Liste
         @RenderThread
         void onLongPressPage(int index);
 
-        void onAutoTransferDone();
+        void onReadingEndAttempt();
     }
 }

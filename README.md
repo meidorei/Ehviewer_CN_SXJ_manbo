@@ -17,7 +17,11 @@
 
 # 下一步
 
-- [ ] 书签栏格式自动转换
+- [ ] 书签栏设置里，检测格式，自动转换
+
+- [ ] 调整全局搜索的页数
+
+- [x] 自动翻页速度fixed
 
 - [ ] 书签栏没有转换：
 
@@ -58,7 +62,7 @@
 
 - applicationId：`com.xjs.ehviewer.debug`
 - versionName：`2.0.2.4`
-- versionCode：`126`
+- versionCode：`129`
 - 正式版 versionCode 仍为 `112`
 
 Windows：
