@@ -23,6 +23,7 @@ import android.graphics.drawable.NinePatchDrawable;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
@@ -44,6 +45,7 @@ import com.hippo.ehviewer.EhDB;
 import com.hippo.ehviewer.R;
 import com.hippo.ehviewer.dao.QuickSearch;
 import com.hippo.ehviewer.ui.scene.ToolbarScene;
+import com.hippo.scene.Announcer;
 import com.hippo.util.DrawableManager;
 import com.hippo.view.ViewTransition;
 import com.hippo.lib.yorozuya.AssertUtils;
@@ -156,7 +158,7 @@ public final class QuickSearchScene extends ToolbarScene {
 
     @Override
     public int getMenuResId() {
-        return R.menu.local_follow_management;
+        return R.menu.quick_search_management;
     }
 
     @Override
@@ -178,6 +180,24 @@ public final class QuickSearchScene extends ToolbarScene {
             filter("");
             return false;
         });
+    }
+
+    @Override
+    public boolean onMenuItemClick(MenuItem item) {
+        if (item.getItemId() == R.id.action_bookmark_diagnostics) {
+            startScene(new Announcer(BookmarkDiagnosticsScene.class));
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (mQuickSearchList == null) return;
+        mQuickSearchList.clear();
+        mQuickSearchList.addAll(EhDB.getAllQuickSearch());
+        filter(mSearchQuery);
     }
 
     @Override

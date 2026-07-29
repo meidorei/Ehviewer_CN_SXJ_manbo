@@ -316,6 +316,28 @@
     <string name="image_search_not_quick_search">Can\'t add image search as quick search</string>
     <string name="duplicate_quick_search">A duplicate quick search exists. The name is \"%s\".</string>
     <string name="duplicate_name">This name is already in use.</string>
+    <string name="bookmark_diagnostics_action">Check bookmarks</string>
+    <string name="bookmark_diagnostics_title">Bookmark check report</string>
+    <string name="bookmark_diagnostics_summary_title">Local bookmark check</string>
+    <string name="bookmark_diagnostics_summary_detail">%1$d bookmarks · %2$d duplicate groups · %3$d duplicate bookmarks · %4$d direct fallbacks</string>
+    <string name="bookmark_diagnostics_duplicates_section">Duplicate bookmarks (%1$d groups)</string>
+    <string name="bookmark_diagnostics_fallback_section">Direct global-scan fallbacks (%1$d)</string>
+    <string name="bookmark_diagnostics_group_title">Duplicate group %1$d · %2$d bookmarks</string>
+    <string name="bookmark_diagnostics_status_duplicate">Duplicate query</string>
+    <string name="bookmark_diagnostics_status_fallback">Falls back to per-bookmark scan</string>
+    <string name="bookmark_diagnostics_empty">No duplicate or direct-fallback bookmarks found.</string>
+    <string name="bookmark_diagnostics_expand_query">Expand or collapse the query for %1$s</string>
+    <string name="bookmark_diagnostics_delete_accessibility">Delete duplicate bookmark %1$s</string>
+    <string name="bookmark_diagnostics_delete_message">Delete “%1$s”?\n\nQuery: %2$s</string>
+    <string name="bookmark_diagnostics_deleted">Bookmark deleted</string>
+    <string name="bookmark_diagnostics_reason_tag">The saved tag cannot be reproduced exactly during the global scan.</string>
+    <string name="bookmark_diagnostics_reason_empty_uploader">The uploader query is empty.</string>
+    <string name="bookmark_diagnostics_reason_operator">The query contains OR, ~, unmatched quotes, or another complex operator.</string>
+    <string name="bookmark_diagnostics_reason_full_text">The query contains a title or full-text keyword that cannot be matched from gallery tags.</string>
+    <string name="bookmark_diagnostics_reason_fuzzy">The query contains a wildcard or fuzzy expression.</string>
+    <string name="bookmark_diagnostics_reason_negative_uploader">Negative uploader filters cannot be reproduced exactly in the global scan.</string>
+    <string name="bookmark_diagnostics_reason_field">The query uses a field that is not available in global-scan gallery data.</string>
+    <string name="bookmark_diagnostics_reason_unknown">The query cannot be reproduced exactly in the global scan.</string>
 
     <string name="subscription_tip">Click “+” to add Subscription</string>
 

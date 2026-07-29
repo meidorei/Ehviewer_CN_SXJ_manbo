@@ -15,6 +15,16 @@ public final class BookmarkUpdatePolicy {
     private BookmarkUpdatePolicy() {}
 
     public static Result resolve(QuickSearch search) {
+        Result validation = validate(search);
+        if (!validation.supported) return validation;
+        ListUrlBuilder builder = new ListUrlBuilder();
+        builder.set(search);
+        String url = builder.build(true);
+        return new Result(true, "", url, validation.signature);
+    }
+
+    /** Validates the saved-query contract without resolving a host-dependent URL. */
+    public static Result validate(QuickSearch search) {
         if (search == null || search.id == null) {
             return Result.unsupported("invalid bookmark", "");
         }
@@ -26,10 +36,7 @@ public final class BookmarkUpdatePolicy {
         if (matcher.find() && !"chinese".equals(matcher.group(1).toLowerCase(Locale.ROOT))) {
             return Result.unsupported("language conflict", rawSignature);
         }
-        ListUrlBuilder builder = new ListUrlBuilder();
-        builder.set(search);
-        String url = builder.build(true);
-        return new Result(true, "", url, rawSignature);
+        return new Result(true, "", "", rawSignature);
     }
 
     static String querySignature(QuickSearch search) {
