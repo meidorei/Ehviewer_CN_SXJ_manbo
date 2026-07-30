@@ -60,9 +60,9 @@
 
 当前功能仅针对调试版构建和验证：
 
-- applicationId：`com.xjs.ehviewer.debug`
-- versionName：`2.0.2.7`
-- versionCode：`132`
+- applicationId：`com.ehviewer.manbo.debug`
+- versionName：`2.0.2.9`
+- versionCode：`134`
 - 正式版 versionCode 仍为 `112`
 
 Windows：

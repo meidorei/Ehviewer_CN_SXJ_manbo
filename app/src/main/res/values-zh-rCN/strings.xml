@@ -235,6 +235,7 @@
     <string name="duplicate_quick_search">已存在相同的书签，名称为“%s”。</string>
     <string name="duplicate_name">已存在相同名称</string>
     <string name="bookmark_diagnostics_action">检查书签</string>
+    <string name="bookmark_diagnostics_action_short">检查</string>
     <string name="bookmark_diagnostics_title">书签检查报告</string>
     <string name="bookmark_diagnostics_summary_title">本地书签检查</string>
     <string name="bookmark_diagnostics_summary_detail">共 %1$d 个书签 · %2$d 组重复 · 涉及 %3$d 个书签 · %4$d 个直接降级</string>
