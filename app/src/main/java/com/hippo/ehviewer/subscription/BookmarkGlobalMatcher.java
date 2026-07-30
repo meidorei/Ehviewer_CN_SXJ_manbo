@@ -9,7 +9,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -18,52 +17,35 @@ import java.util.Set;
  */
 public final class BookmarkGlobalMatcher {
     public static Result compile(QuickSearch search) {
-        if (search == null) return Result.fallback("invalid bookmark");
+        if (search == null) return Result.fallback(FallbackReason.INVALID_BOOKMARK);
         List<String> positiveTags = new ArrayList<>();
         List<String> negativeTags = new ArrayList<>();
         List<String> uploaders = new ArrayList<>();
 
         if (search.mode == ListUrlBuilder.MODE_TAG) {
-            String tag = normalizeTag(search.keyword);
-            if (tag == null) return Result.fallback("tag query is not exact");
+            String tag = BookmarkQueryNormalizer.normalizeStandaloneTag(search.keyword);
+            if (tag == null) return Result.fallback(FallbackReason.TAG_QUERY_NOT_EXACT);
             positiveTags.add(tag);
         } else if (search.mode == ListUrlBuilder.MODE_UPLOADER) {
-            String uploader = cleanValue(search.keyword);
-            if (uploader.isEmpty()) return Result.fallback("empty uploader");
+            String uploader = BookmarkQueryNormalizer.cleanValue(search.keyword);
+            if (uploader.isEmpty()) return Result.fallback(FallbackReason.EMPTY_UPLOADER);
             uploaders.add(uploader);
         } else if (search.mode == ListUrlBuilder.MODE_NORMAL
                 || search.mode == ListUrlBuilder.MODE_FILTER) {
-            for (String token : tokenize(search.keyword)) {
-                boolean negative = token.startsWith("-");
-                if (negative) token = token.substring(1);
-                if (token.isEmpty() || token.startsWith("~")
-                        || "or".equalsIgnoreCase(token)) {
-                    return Result.fallback("complex search operator");
+            BookmarkQueryNormalizer.ParseResult parsed =
+                    BookmarkQueryNormalizer.parseExactQuery(search.keyword);
+            if (!parsed.exact) return Result.fallback(parsed.reason);
+            for (BookmarkQueryNormalizer.QueryToken token : parsed.tokens) {
+                if ("uploader".equals(token.namespace)) {
+                    uploaders.add(token.value);
+                } else {
+                    String tag = SubscriptionRepository.normalizeTagName(
+                            token.namespace + ':' + token.value);
+                    (token.negative ? negativeTags : positiveTags).add(tag);
                 }
-                int colon = token.indexOf(':');
-                if (colon <= 0 || colon == token.length() - 1) {
-                    return Result.fallback("full-text keyword");
-                }
-                String namespace = token.substring(0, colon).toLowerCase(Locale.ROOT);
-                String rawValue = token.substring(colon + 1);
-                String value = cleanValue(rawValue);
-                if (value.isEmpty() || value.indexOf('*') >= 0 || value.indexOf('?') >= 0
-                        || value.indexOf('~') >= 0) {
-                    return Result.fallback("fuzzy search expression");
-                }
-                if ("uploader".equals(namespace)) {
-                    if (negative) return Result.fallback("negative uploader");
-                    uploaders.add(value);
-                    continue;
-                }
-                if ("l".equals(namespace)) namespace = "language";
-                if ("lang".equals(namespace)) namespace = "language";
-                String tag = normalizeTag(namespace + ':' + value);
-                if (tag == null) return Result.fallback("unsupported search field");
-                (negative ? negativeTags : positiveTags).add(tag);
             }
         } else {
-            return Result.fallback("unsupported mode");
+            return Result.fallback(FallbackReason.UNSUPPORTED_MODE);
         }
 
         return Result.exact(new BookmarkGlobalMatcher(
@@ -119,65 +101,35 @@ public final class BookmarkGlobalMatcher {
         return true;
     }
 
-    private static String normalizeTag(String raw) {
-        if (raw == null) return null;
-        int colon = raw.indexOf(':');
-        if (colon <= 0 || colon == raw.length() - 1) return null;
-        String tag = SubscriptionRepository.normalizeTagName(
-                raw.substring(0, colon) + ':' + cleanValue(raw.substring(colon + 1)));
-        return LocalFollowJson.isValidStandardTag(tag) ? tag : null;
-    }
-
-    private static String cleanValue(String raw) {
-        String value = raw == null ? "" : raw.trim();
-        if (value.endsWith("$")) value = value.substring(0, value.length() - 1).trim();
-        if (value.length() >= 2 && value.startsWith("\"") && value.endsWith("\"")) {
-            value = value.substring(1, value.length() - 1).trim();
-            if (value.endsWith("$")) value = value.substring(0, value.length() - 1).trim();
-        }
-        return value;
-    }
-
-    private static List<String> tokenize(String raw) {
-        if (raw == null || raw.trim().isEmpty()) return Collections.emptyList();
-        List<String> result = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
-        boolean quoted = false;
-        for (int i = 0; i < raw.length(); i++) {
-            char c = raw.charAt(i);
-            if (c == '"') {
-                quoted = !quoted;
-                current.append(c);
-            } else if (Character.isWhitespace(c) && !quoted) {
-                if (current.length() > 0) {
-                    result.add(current.toString());
-                    current.setLength(0);
-                }
-            } else {
-                current.append(c);
-            }
-        }
-        if (quoted) return Collections.singletonList("");
-        if (current.length() > 0) result.add(current.toString());
-        return result;
+    public enum FallbackReason {
+        NONE,
+        INVALID_BOOKMARK,
+        TAG_QUERY_NOT_EXACT,
+        EMPTY_UPLOADER,
+        COMPLEX_OPERATOR,
+        FULL_TEXT_KEYWORD,
+        FUZZY_EXPRESSION,
+        NEGATIVE_UPLOADER,
+        UNSUPPORTED_FIELD,
+        UNSUPPORTED_MODE
     }
 
     public static final class Result {
         public final boolean exact;
-        public final String fallbackReason;
+        public final FallbackReason reason;
         public final BookmarkGlobalMatcher matcher;
 
-        private Result(boolean exact, String reason, BookmarkGlobalMatcher matcher) {
+        private Result(boolean exact, FallbackReason reason, BookmarkGlobalMatcher matcher) {
             this.exact = exact;
-            this.fallbackReason = reason;
+            this.reason = reason;
             this.matcher = matcher;
         }
 
         private static Result exact(BookmarkGlobalMatcher matcher) {
-            return new Result(true, "", matcher);
+            return new Result(true, FallbackReason.NONE, matcher);
         }
 
-        private static Result fallback(String reason) {
+        private static Result fallback(FallbackReason reason) {
             return new Result(false, reason, null);
         }
     }

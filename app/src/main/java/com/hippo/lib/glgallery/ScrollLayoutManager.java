@@ -78,6 +78,8 @@ class ScrollLayoutManager extends GalleryView.LayoutManager {
 
     private int mBottomStateBottom;
     private boolean mBottomStateHasNext;
+    private boolean mGestureStartedAtBottom;
+    private boolean mReadingEndAttemptSent;
 
     public ScrollLayoutManager(Context context, @NonNull GalleryView galleryView, int interval) {
         super(galleryView);
@@ -117,6 +119,8 @@ class ScrollLayoutManager extends GalleryView.LayoutManager {
         mScrollUp = false;
         mFlingUp = false;
         mStopAnimationFinger = false;
+        mGestureStartedAtBottom = false;
+        mReadingEndAttemptSent = false;
     }
 
     // Return true for animations are running
@@ -537,11 +541,17 @@ class ScrollLayoutManager extends GalleryView.LayoutManager {
         mDeltaY = 0;
         mScrollUp = false;
         mStopAnimationFinger = cancelAllAnimations();
+        getBottomState();
+        mGestureStartedAtBottom = !mBottomStateHasNext
+                && mBottomStateBottom <= mGalleryView.getHeight();
+        mReadingEndAttemptSent = false;
     }
 
     @Override
     public void onUp() {
         mScrollUp = false;
+        mGestureStartedAtBottom = false;
+        mReadingEndAttemptSent = false;
         mGalleryView.getEdgeView().onRelease();
     }
 
@@ -744,7 +754,12 @@ class ScrollLayoutManager extends GalleryView.LayoutManager {
         mKeepTopPageIndex = GalleryPageView.INVALID_INDEX;
         mKeepTop = INVALID_TOP;
         mScrollUp = dy < 0;
-        scrollInternal(dx, dy, false, x, y);
+        boolean reachedEdge = scrollInternal(dx, dy, false, x, y);
+        if (reachedEdge && dy > 0 && mGestureStartedAtBottom
+                && !mReadingEndAttemptSent) {
+            mReadingEndAttemptSent = true;
+            mGalleryView.onReadingEndAttempt();
+        }
     }
 
     @Override
@@ -879,7 +894,6 @@ class ScrollLayoutManager extends GalleryView.LayoutManager {
         GalleryView galleryView = mGalleryView;
         if (mIndex == 0 && mOffsetY >= 0) {
             mOverScroller.overScroll(GLEdgeView.TOP);
-            mGalleryView.onTransferEnd();
         } else {
             // Cancel all animations
             cancelAllAnimations();
@@ -935,7 +949,7 @@ class ScrollLayoutManager extends GalleryView.LayoutManager {
         boolean hasNext = mBottomStateHasNext;
         if (!hasNext && bottom <= galleryView.getHeight()) {
             mOverScroller.overScroll(GLEdgeView.BOTTOM);
-            mGalleryView.onTransferEnd();
+            mGalleryView.onReadingEndAttempt();
         } else {
             // Cancel all animations
             cancelAllAnimations();

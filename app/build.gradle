@@ -26,12 +26,12 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.xjs.ehviewer"
+        applicationId "com.ehviewer.manbo"
         minSdkVersion 23
         //noinspection ExpiredTargetSdkVersion
         targetSdkVersion 30
         versionCode 112
-        versionName "2.0.2.4"
+        versionName "2.0.2.9"
         vectorDrawables.useSupportLibrary = true
         resourceConfigurations += ['zh', 'zh-rCN', 'zh-rHK', 'zh-rTW', 'es', 'ja', 'ko', 'fr', 'de', 'th']
         testOptions.unitTests.includeAndroidResources = true
@@ -58,18 +58,18 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            buildConfigField 'String', 'FILE_PROVIDER_AUTHORITY', '"com.hippo.ehviewer.fileprovider"'
+            buildConfigField 'String', 'FILE_PROVIDER_AUTHORITY', '"com.ehviewer.manbo.fileprovider"'
         }
         debug {
             applicationIdSuffix ".debug"
-            buildConfigField 'String', 'FILE_PROVIDER_AUTHORITY', '"com.hippo.ehviewer.debug.fileprovider"'
+            buildConfigField 'String', 'FILE_PROVIDER_AUTHORITY', '"com.ehviewer.manbo.debug.fileprovider"'
         }
     }
 
     applicationVariants.all { variant ->
         if (variant.buildType.name == "debug") {
             variant.outputs.all { output ->
-                output.versionCodeOverride = 126
+                output.versionCodeOverride = 134
             }
         }
     }

@@ -92,9 +92,11 @@ import com.hippo.ehviewer.dao.DownloadLabel;
 import com.hippo.ehviewer.download.DownloadManager;
 import com.hippo.ehviewer.download.DownloadService;
 import com.hippo.ehviewer.event.SomethingNeedRefresh;
+import com.hippo.ehviewer.reader.DownloadReadingQueue;
 import com.hippo.ehviewer.spider.SpiderInfo;
 import com.hippo.ehviewer.sync.DownloadListInfosExecutor;
 import com.hippo.ehviewer.sync.DownloadSpiderInfoExecutor;
+import com.hippo.ehviewer.ui.DownloadGalleryActivity;
 import com.hippo.ehviewer.ui.GalleryActivity;
 import com.hippo.ehviewer.ui.MainActivity;
 import com.hippo.ehviewer.ui.annotation.ViewLifeCircle;
@@ -973,45 +975,55 @@ public class DownloadsScene extends ToolbarScene
                 return false;
             }
 
-            DownloadInfo downloadInfo = list.get(positionInList(position));
-            Intent intent = new Intent(activity, GalleryActivity.class);
-            // Check if this is an imported archive
-            if (downloadInfo.archiveUri != null && downloadInfo.archiveUri.startsWith("content://")) {
-                // This is an imported archive, ensure URI permission is available
-                Uri archiveUri = Uri.parse(downloadInfo.archiveUri);
-                try {
-                    // Test if we can access the URI
-                    try (InputStream testStream = getEHContext().getContentResolver().openInputStream(archiveUri)) {
-                        if (testStream == null) {
-                            Toast.makeText(getEHContext(), R.string.archive_not_accessible, Toast.LENGTH_SHORT).show();
-                            return true;
-                        }
-                    }
-                } catch (SecurityException e) {
-                    // Try to restore permission
-                    try {
-                        getEHContext().getContentResolver().takePersistableUriPermission(archiveUri,
-                                Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    } catch (Exception ex) {
-                        Toast.makeText(getEHContext(), R.string.archive_permission_lost, Toast.LENGTH_LONG).show();
-                        Analytics.recordException(ex);
-                        return true;
-                    }
-                } catch (Exception e) {
-                    Toast.makeText(getEHContext(), R.string.archive_not_accessible, Toast.LENGTH_SHORT).show();
-                    return true;
-                }
-                intent.setAction(Intent.ACTION_VIEW);
-                intent.setData(archiveUri);
-            } else {
-                // This is a normal download, use ACTION_EH
-                intent.setAction(GalleryActivity.ACTION_EH);
-                intent.putExtra(GalleryActivity.KEY_GALLERY_INFO, downloadInfo);
-            }
-//            startActivity(intent);
-            galleryActivityLauncher.launch(intent);
+            int listPosition = positionInList(position);
+            DownloadInfo downloadInfo = list.get(listPosition);
+            launchDownloadReader(activity, downloadInfo,
+                    DownloadReadingQueue.snapshot(list), listPosition);
             return true;
         }
+    }
+
+    private boolean launchDownloadReader(@NonNull Activity activity,
+            @NonNull DownloadInfo downloadInfo, @NonNull long[] queue, int queueIndex) {
+        Intent intent = new Intent(activity, DownloadGalleryActivity.class);
+        intent.putExtra(GalleryActivity.KEY_GALLERY_INFO, downloadInfo);
+        intent.putExtra(GalleryActivity.KEY_DOWNLOAD_READING_QUEUE, queue);
+        intent.putExtra(GalleryActivity.KEY_DOWNLOAD_READING_INDEX, queueIndex);
+        intent.putExtra(GalleryActivity.KEY_DOWNLOAD_READING_START_INDEX, queueIndex);
+        if (downloadInfo.archiveUri != null && downloadInfo.archiveUri.startsWith("content://")) {
+            Uri archiveUri = Uri.parse(downloadInfo.archiveUri);
+            try {
+                try (InputStream testStream = getEHContext().getContentResolver()
+                        .openInputStream(archiveUri)) {
+                    if (testStream == null) {
+                        Toast.makeText(getEHContext(), R.string.archive_not_accessible,
+                                Toast.LENGTH_SHORT).show();
+                        return false;
+                    }
+                }
+            } catch (SecurityException e) {
+                try {
+                    getEHContext().getContentResolver().takePersistableUriPermission(archiveUri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                } catch (Exception ex) {
+                    Toast.makeText(getEHContext(), R.string.archive_permission_lost,
+                            Toast.LENGTH_LONG).show();
+                    Analytics.recordException(ex);
+                    return false;
+                }
+            } catch (Exception e) {
+                Toast.makeText(getEHContext(), R.string.archive_not_accessible,
+                        Toast.LENGTH_SHORT).show();
+                return false;
+            }
+            intent.setAction(Intent.ACTION_VIEW);
+            intent.setData(archiveUri);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } else {
+            intent.setAction(GalleryActivity.ACTION_EH);
+        }
+        galleryActivityLauncher.launch(intent);
+        return true;
     }
 
     @Override
@@ -1201,10 +1213,8 @@ public class DownloadsScene extends ToolbarScene
             return;
         }
 
-        Intent intent = new Intent(activity, GalleryActivity.class);
-        intent.setAction(GalleryActivity.ACTION_EH);
-        intent.putExtra(GalleryActivity.KEY_GALLERY_INFO, list.get(position));
-        galleryActivityLauncher.launch(intent);
+        launchDownloadReader(activity, list.get(position),
+                DownloadReadingQueue.snapshot(list), position);
     }
 
     @Override
@@ -1551,47 +1561,51 @@ public class DownloadsScene extends ToolbarScene
 
     @SuppressLint("NotifyDataSetChanged")
     private void updateReadProcess(ActivityResult result) {
-        if (result.getResultCode() == LOCAL_GALLERY_INFO_CHANGE) {
-            Intent data = result.getData();
-            if (data != null) {
-                GalleryInfo info = data.getParcelableExtra("info");
-
-                // Check if this is an imported archive - skip SpiderInfo processing
-                boolean isImportedArchive = false;
-                if (info instanceof DownloadInfo downloadInfo) {
-                    isImportedArchive = downloadInfo.archiveUri != null &&
-                            downloadInfo.archiveUri.startsWith("content://");
-                }
-
-                if (!isImportedArchive && info != null) {
-                    // Only process SpiderInfo for regular downloads, not imported archives
-                    mSpiderInfoMap.remove(info.gid);
-                    SpiderInfo spiderInfo = getSpiderInfo(info);
-                    if (spiderInfo != null) {
-                        mSpiderInfoMap.put(info.gid, spiderInfo);
-                    }
-                }
-
-//                mSpiderInfoMap.remove(info.gid);
-//                SpiderInfo spiderInfo = getSpiderInfo(info);
-                int position = -1;
-                if (mList == null || mAdapter == null || info == null) {
-                    return;
-                }
-                for (int i = 0; i < mList.size(); i++) {
-                    if (mList.get(i).gid == info.gid) {
-                        position = listIndexInPage(i);
-                        break;
-                    }
-                }
-                if (position != -1) {
-                    mAdapter.notifyItemChanged(position);
-                } else {
-                    mAdapter.notifyDataSetChanged();
-                }
-
-            }
+        if (result.getResultCode() != LOCAL_GALLERY_INFO_CHANGE) {
+            return;
         }
+        Intent data = result.getData();
+        if (data == null || mDownloadManager == null) {
+            return;
+        }
+        GalleryInfo info = data.getParcelableExtra("info");
+        long[] queue = data.getLongArrayExtra(GalleryActivity.KEY_DOWNLOAD_READING_QUEUE);
+        int startIndex = data.getIntExtra(
+                GalleryActivity.KEY_DOWNLOAD_READING_START_INDEX, -1);
+        int endIndex = data.getIntExtra(GalleryActivity.KEY_DOWNLOAD_READING_INDEX, -1);
+        List<DownloadInfo> refreshList = new ArrayList<>();
+        if (queue != null && startIndex >= 0 && endIndex >= startIndex) {
+            int safeEnd = Math.min(endIndex, queue.length - 1);
+            for (int i = startIndex; i <= safeEnd; i++) {
+                DownloadInfo queuedInfo = mDownloadManager.getDownloadInfo(queue[i]);
+                if (queuedInfo != null && !isImportedArchive(queuedInfo)) {
+                    mSpiderInfoMap.remove(queuedInfo.gid);
+                    refreshList.add(queuedInfo);
+                }
+            }
+        } else if (info instanceof DownloadInfo downloadInfo
+                && !isImportedArchive(downloadInfo)) {
+            mSpiderInfoMap.remove(downloadInfo.gid);
+            refreshList.add(downloadInfo);
+        }
+        if (refreshList.isEmpty()) {
+            if (mAdapter != null) {
+                mAdapter.notifyDataSetChanged();
+            }
+            return;
+        }
+        DownloadSpiderInfoExecutor executor = new DownloadSpiderInfoExecutor(
+                refreshList, refreshed -> {
+                    mSpiderInfoMap.putAll(refreshed);
+                    if (mAdapter != null) {
+                        mAdapter.notifyDataSetChanged();
+                    }
+                });
+        executor.execute();
+    }
+
+    private static boolean isImportedArchive(@NonNull DownloadInfo info) {
+        return info.archiveUri != null && info.archiveUri.startsWith("content://");
     }
 
     @SuppressLint("NotifyDataSetChanged")

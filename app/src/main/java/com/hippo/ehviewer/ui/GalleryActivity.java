@@ -67,14 +67,22 @@ import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.hippo.android.resource.AttrResources;
 import com.hippo.ehviewer.AppConfig;
+import com.hippo.ehviewer.EhApplication;
 import com.hippo.ehviewer.R;
 import com.hippo.ehviewer.Settings;
+import com.hippo.ehviewer.client.EhUtils;
 import com.hippo.ehviewer.client.data.GalleryInfo;
+import com.hippo.ehviewer.dao.DownloadInfo;
+import com.hippo.ehviewer.download.DownloadManager;
 import com.hippo.ehviewer.event.GalleryActivityEvent;
 import com.hippo.ehviewer.gallery.ArchiveGalleryProvider;
 import com.hippo.ehviewer.gallery.DirGalleryProvider;
 import com.hippo.ehviewer.gallery.EhGalleryProvider;
 import com.hippo.ehviewer.gallery.GalleryProvider2;
+import com.hippo.ehviewer.reader.AutoTransferIntervalController;
+import com.hippo.ehviewer.reader.DownloadReadingNoticePolicy;
+import com.hippo.ehviewer.reader.DownloadReadingQueue;
+import com.hippo.ehviewer.spider.SpiderDen;
 import com.hippo.ehviewer.widget.GalleryGuideView;
 import com.hippo.ehviewer.widget.GalleryHeader;
 import com.hippo.ehviewer.widget.ReversibleSeekBar;
@@ -104,6 +112,8 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.Locale;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -124,7 +134,14 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
     public static final String DATA_IN_EVENT = "data_in_event";
     public static final String KEY_PAGE = "page";
     public static final String KEY_CURRENT_INDEX = "current_index";
+    public static final String KEY_DOWNLOAD_READING_QUEUE = "download_reading_queue";
+    public static final String KEY_DOWNLOAD_READING_INDEX = "download_reading_index";
+    public static final String KEY_DOWNLOAD_READING_START_INDEX = "download_reading_start_index";
+    public static final String KEY_START_AUTO_TRANSFER = "start_auto_transfer";
+    private static final String KEY_DOWNLOAD_READING_PROVIDER_ERROR_SHOWN =
+            "download_reading_provider_error_shown";
 
+    private static final String TAG = "GalleryActivity";
     private static final long SLIDER_ANIMATION_DURING = 150;
     private static final long HIDE_SLIDER_DELAY = 3000;
 
@@ -178,10 +195,17 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
 
     private boolean canFinish = false;
     private boolean autoTransferring = false;
+    private long[] mDownloadReadingQueue;
+    private int mDownloadReadingIndex = -1;
+    private int mDownloadReadingStartIndex = -1;
+    private boolean mStartAutoTransfer;
+    private boolean mQueueAdvanceInProgress;
+    private volatile boolean mQueueProviderErrorShown;
 
     private final ConcurrentPool<NotifyTask> mNotifyTaskPool = new ConcurrentPool<>(3);
 
-    private ScheduledExecutorService transferService = Executors.newSingleThreadScheduledExecutor();
+    private ScheduledExecutorService transferService;
+    private final ExecutorService mQueueExecutor = Executors.newSingleThreadExecutor();
     private final Handler transHandle = new Handler(Looper.getMainLooper());
 
     private final ValueAnimator.AnimatorUpdateListener mUpdateSliderListener = new ValueAnimator.AnimatorUpdateListener() {
@@ -294,6 +318,11 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
             canFinish = true;
         }
         mPage = intent.getIntExtra(KEY_PAGE, -1);
+        mDownloadReadingQueue = intent.getLongArrayExtra(KEY_DOWNLOAD_READING_QUEUE);
+        mDownloadReadingIndex = intent.getIntExtra(KEY_DOWNLOAD_READING_INDEX, -1);
+        mDownloadReadingStartIndex = intent.getIntExtra(
+                KEY_DOWNLOAD_READING_START_INDEX, mDownloadReadingIndex);
+        mStartAutoTransfer = intent.getBooleanExtra(KEY_START_AUTO_TRANSFER, false);
         buildProvider();
     }
 
@@ -304,6 +333,13 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
         mGalleryInfo = savedInstanceState.getParcelable(KEY_GALLERY_INFO);
         mPage = savedInstanceState.getInt(KEY_PAGE, -1);
         mCurrentIndex = savedInstanceState.getInt(KEY_CURRENT_INDEX);
+        mDownloadReadingQueue = savedInstanceState.getLongArray(KEY_DOWNLOAD_READING_QUEUE);
+        mDownloadReadingIndex = savedInstanceState.getInt(KEY_DOWNLOAD_READING_INDEX, -1);
+        mDownloadReadingStartIndex = savedInstanceState.getInt(
+                KEY_DOWNLOAD_READING_START_INDEX, mDownloadReadingIndex);
+        mStartAutoTransfer = savedInstanceState.getBoolean(KEY_START_AUTO_TRANSFER, false);
+        mQueueProviderErrorShown = savedInstanceState.getBoolean(
+                KEY_DOWNLOAD_READING_PROVIDER_ERROR_SHOWN, false);
         buildProvider();
     }
 
@@ -318,6 +354,12 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
         }
         outState.putInt(KEY_PAGE, mPage);
         outState.putInt(KEY_CURRENT_INDEX, mCurrentIndex);
+        outState.putLongArray(KEY_DOWNLOAD_READING_QUEUE, mDownloadReadingQueue);
+        outState.putInt(KEY_DOWNLOAD_READING_INDEX, mDownloadReadingIndex);
+        outState.putInt(KEY_DOWNLOAD_READING_START_INDEX, mDownloadReadingStartIndex);
+        outState.putBoolean(KEY_START_AUTO_TRANSFER, autoTransferring || mStartAutoTransfer);
+        outState.putBoolean(KEY_DOWNLOAD_READING_PROVIDER_ERROR_SHOWN,
+                mQueueProviderErrorShown);
     }
 
     @Override
@@ -454,6 +496,11 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
             FrameLayout mainLayout = (FrameLayout) ViewUtils.$$(this, R.id.main);
             mainLayout.addView(new GalleryGuideView(this));
         }
+
+        if (mStartAutoTransfer) {
+            mStartAutoTransfer = false;
+            setAutoTransferring(true);
+        }
     }
 
     private boolean isEglAvailable() {
@@ -489,10 +536,8 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
 
     @Override
     protected void onDestroy() {
-        if (!transferService.isShutdown()) {
-            transferService.shutdown();
-            transferService = null;
-        }
+        stopAutoTransferScheduler();
+        mQueueExecutor.shutdownNow();
         mGLRootView = null;
         mGalleryView = null;
         if (mGalleryAdapter != null) {
@@ -515,11 +560,6 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
         mRightText = null;
         mSeekBar = null;
 
-        if (transferService != null && !transferService.isShutdown()) {
-            transferService.shutdown();
-            transferService = null;
-        }
-
         super.onDestroy();
         SimpleHandler.getInstance().removeCallbacks(mHideSliderRunnable);
         //销毁事件
@@ -530,6 +570,9 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
     public void onBackPressed() {
         Intent intent = new Intent();
         intent.putExtra("info", mGalleryInfo);
+        intent.putExtra(KEY_DOWNLOAD_READING_QUEUE, mDownloadReadingQueue);
+        intent.putExtra(KEY_DOWNLOAD_READING_INDEX, mDownloadReadingIndex);
+        intent.putExtra(KEY_DOWNLOAD_READING_START_INDEX, mDownloadReadingStartIndex);
         setResult(LOCAL_GALLERY_INFO_CHANGE, intent);
         super.onBackPressed();
     }
@@ -653,36 +696,45 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
 //    }
 
     private void autoRead(View view) {
-        autoTransferring = !autoTransferring;
-        if (mAutoTransferPanel == null) {
+        setAutoTransferring(!autoTransferring);
+    }
+
+    private void setAutoTransferring(boolean enabled) {
+        autoTransferring = enabled;
+        if (mAutoTransferPanel != null) {
+            mAutoTransferPanel.setImageResource(enabled
+                    ? R.drawable.ic_pause_circle
+                    : R.drawable.ic_start_play_24);
+        }
+        stopAutoTransferScheduler();
+        if (!enabled) {
             return;
         }
-
-        if (!autoTransferring) {
-            mAutoTransferPanel.setImageResource(R.drawable.ic_start_play_24);
-            transferService.shutdown();
-        } else {
-            mAutoTransferPanel.setImageResource(R.drawable.ic_pause_circle);
-            if (transferService.isShutdown()) {
-                transferService = Executors.newSingleThreadScheduledExecutor();
+        transferService = Executors.newSingleThreadScheduledExecutor();
+        long intervalMillis = Settings.getAutoTransferIntervalMillis();
+        transferService.scheduleWithFixedDelay(() -> transHandle.post(() -> {
+            if (mGalleryView == null || !autoTransferring || mQueueAdvanceInProgress) {
+                return;
             }
-            long initialDelay = Settings.getStartTransferTime();
-            long waitTime = initialDelay * 2L;
-            try {
-                transferService.scheduleWithFixedDelay(() -> transHandle.post(() -> {
-                    if (mGalleryView == null) {
-                        return;
-                    }
-                    if (mLayoutMode == GalleryView.LAYOUT_RIGHT_TO_LEFT) {
-                        mGalleryView.pageLeft();
-                    } else {
-                        mGalleryView.pageRight();
-                    }
-                }), initialDelay, waitTime, TimeUnit.SECONDS);
-            } catch (IllegalArgumentException ignore) {
-
+            if (mLayoutMode == GalleryView.LAYOUT_RIGHT_TO_LEFT) {
+                mGalleryView.pageLeft();
+            } else {
+                mGalleryView.pageRight();
             }
+        }), intervalMillis, intervalMillis, TimeUnit.MILLISECONDS);
+    }
+
+    private void restartAutoTransferIfRunning() {
+        if (autoTransferring) {
+            setAutoTransferring(true);
         }
+    }
+
+    private void stopAutoTransferScheduler() {
+        if (transferService != null && !transferService.isShutdown()) {
+            transferService.shutdownNow();
+        }
+        transferService = null;
     }
 
     public boolean onGenericMotion(View view, MotionEvent motionEvent) {
@@ -831,10 +883,141 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
     }
 
     @Override
-    public void onAutoTransferDone() {
-        if (autoTransferring) {
-            autoRead(mAutoTransferPanel);
+    public void onReadingEndAttempt() {
+        if (!Settings.getDownloadContinuousReading()
+                || mDownloadReadingQueue == null
+                || mDownloadReadingIndex < 0) {
+            if (autoTransferring) {
+                setAutoTransferring(false);
+            }
+            return;
         }
+        if (mQueueAdvanceInProgress) {
+            return;
+        }
+        mQueueAdvanceInProgress = true;
+        boolean resumeAutoTransfer = autoTransferring;
+        if (resumeAutoTransfer) {
+            setAutoTransferring(false);
+        }
+        mQueueExecutor.execute(() -> findAndOpenNextDownload(resumeAutoTransfer));
+    }
+
+    private void findAndOpenNextDownload(boolean resumeAutoTransfer) {
+        DownloadManager manager = EhApplication.getDownloadManager(getApplicationContext());
+        DownloadInfo[] resolved = new DownloadInfo[1];
+        int nextIndex = DownloadReadingQueue.findNextAvailableIndex(
+                mDownloadReadingQueue, mDownloadReadingIndex, gid -> {
+                    DownloadInfo candidate = manager.getDownloadInfo(gid);
+                    if (candidate != null && isQueuedDownloadReadable(candidate)) {
+                        resolved[0] = candidate;
+                        return true;
+                    }
+                    return false;
+                });
+        int skipped = nextIndex >= 0
+                ? nextIndex - mDownloadReadingIndex - 1
+                : mDownloadReadingQueue.length - mDownloadReadingIndex - 1;
+        DownloadInfo resolvedInfo = resolved[0];
+        int resolvedIndex = nextIndex;
+        int skippedCount = skipped;
+        runOnUiThread(() -> {
+            if (isFinishing() || isDestroyed()) {
+                return;
+            }
+            for (DownloadReadingNoticePolicy.Notice notice
+                    : DownloadReadingNoticePolicy.buildAdvanceNotices(
+                            skippedCount, resolvedInfo != null)) {
+                if (notice == DownloadReadingNoticePolicy.Notice.SKIPPED) {
+                    Toast.makeText(getApplicationContext(), getString(
+                            R.string.download_reading_queue_skipped, skippedCount),
+                            Toast.LENGTH_SHORT).show();
+                } else if (notice == DownloadReadingNoticePolicy.Notice.END) {
+                    mQueueAdvanceInProgress = false;
+                    Toast.makeText(getApplicationContext(),
+                            R.string.download_reading_queue_end,
+                            Toast.LENGTH_SHORT).show();
+                }
+            }
+            if (resolvedInfo == null) {
+                return;
+            }
+            openQueuedDownload(resolvedInfo, resolvedIndex, resumeAutoTransfer);
+        });
+    }
+
+    private boolean isQueuedDownloadReadable(@NonNull DownloadInfo info) {
+        if (info.archiveUri != null && info.archiveUri.startsWith("content://")) {
+            try (InputStream inputStream = getContentResolver().openInputStream(
+                    Uri.parse(info.archiveUri))) {
+                return inputStream != null;
+            } catch (Exception ignored) {
+                return false;
+            }
+        }
+        UniFile dir = SpiderDen.getExistingGalleryDownloadDir(info);
+        if (dir == null || !dir.isDirectory()) {
+            return false;
+        }
+        try {
+            UniFile[] files = dir.listFiles();
+            if (files == null) {
+                return false;
+            }
+            for (UniFile file : files) {
+                if (file == null || file.isDirectory()) {
+                    continue;
+                }
+                String name = file.getName();
+                if (name == null) {
+                    continue;
+                }
+                String lowerName = name.toLowerCase(Locale.ROOT);
+                for (String extension : GalleryProvider2.SUPPORT_IMAGE_EXTENSIONS) {
+                    if (lowerName.endsWith(extension.toLowerCase(Locale.ROOT))) {
+                        return true;
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            return false;
+        }
+        return false;
+    }
+
+    private void openQueuedDownload(@NonNull DownloadInfo info, int queueIndex,
+            boolean resumeAutoTransfer) {
+        Intent intent = new Intent(this, getClass());
+        intent.putExtra(KEY_GALLERY_INFO, info);
+        if (info.archiveUri != null && info.archiveUri.startsWith("content://")) {
+            intent.setAction(Intent.ACTION_VIEW);
+            intent.setData(Uri.parse(info.archiveUri));
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } else {
+            intent.setAction(ACTION_EH);
+        }
+        intent.putExtra(KEY_DOWNLOAD_READING_QUEUE, mDownloadReadingQueue);
+        intent.putExtra(KEY_DOWNLOAD_READING_INDEX, queueIndex);
+        intent.putExtra(KEY_DOWNLOAD_READING_START_INDEX, mDownloadReadingStartIndex);
+        intent.putExtra(KEY_START_AUTO_TRANSFER, resumeAutoTransfer);
+        intent.addFlags(Intent.FLAG_ACTIVITY_FORWARD_RESULT | Intent.FLAG_ACTIVITY_NO_ANIMATION);
+        try {
+            startActivity(intent);
+        } catch (RuntimeException e) {
+            mQueueAdvanceInProgress = false;
+            Log.e(TAG, "Failed to open queued download", e);
+            Toast.makeText(getApplicationContext(),
+                    R.string.download_reading_queue_open_failed,
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        String title = DownloadReadingNoticePolicy.ellipsizeTitle(
+                EhUtils.getSuitableTitle(info), info.gid);
+        Toast.makeText(getApplicationContext(), getString(
+                R.string.download_reading_queue_opening, title),
+                Toast.LENGTH_SHORT).show();
+        overridePendingTransition(0, 0);
+        finish();
     }
 
 //    @Override
@@ -1138,14 +1321,15 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
         });
     }
 
-    private class GalleryMenuHelper implements DialogInterface.OnClickListener {
+    private class GalleryMenuHelper {
 
         private final View mView;
         private final Spinner mScreenRotation;
         private final Spinner mReadingDirection;
         private final Spinner mScaleMode;
         private final Spinner mStartPosition;
-        private final SeekBar mStartTransferTime;
+        private final AutoTransferIntervalController mAutoTransferInterval;
+        private final SwitchCompat mDownloadContinuousReading;
         private final SwitchCompat mKeepScreenOn;
         private final SwitchCompat mShowClock;
         private final SwitchCompat mShowProgress;
@@ -1164,7 +1348,11 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
             mReadingDirection = mView.findViewById(R.id.reading_direction);
             mScaleMode = mView.findViewById(R.id.page_scaling);
             mStartPosition = mView.findViewById(R.id.start_position);
-            mStartTransferTime = mView.findViewById(R.id.start_transfer_time);
+            View intervalControl = mView.findViewById(R.id.auto_transfer_interval_control);
+            mAutoTransferInterval = new AutoTransferIntervalController(intervalControl,
+                    Settings.getAutoTransferIntervalMillis(), null);
+            mDownloadContinuousReading = mView.findViewById(
+                    R.id.download_continuous_reading);
             mKeepScreenOn = mView.findViewById(R.id.keep_screen_on);
             mShowClock = mView.findViewById(R.id.show_clock);
             mShowProgress = mView.findViewById(R.id.show_progress);
@@ -1180,7 +1368,7 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
             mReadingDirection.setSelection(Settings.getReadingDirection());
             mScaleMode.setSelection(Settings.getPageScaling());
             mStartPosition.setSelection(Settings.getStartPosition());
-            mStartTransferTime.setProgress(Settings.getStartTransferTime());
+            mDownloadContinuousReading.setChecked(Settings.getDownloadContinuousReading());
             mKeepScreenOn.setChecked(Settings.getKeepScreenOn());
             mShowClock.setChecked(Settings.getShowClock());
             mShowProgress.setChecked(Settings.getShowProgress());
@@ -1217,10 +1405,12 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
             return mView;
         }
 
-        @Override
-        public void onClick(DialogInterface dialog, int which) {
+        public boolean apply() {
             if (mGalleryView == null) {
-                return;
+                return false;
+            }
+            if (!mAutoTransferInterval.validate()) {
+                return false;
             }
 
             int screenRotation = mScreenRotation.getSelectedItemPosition();
@@ -1238,7 +1428,8 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
             boolean customScreenLightness = mCustomScreenLightness.isChecked();
 
             int screenLightness = mScreenLightness.getProgress();
-            int transferTime = mStartTransferTime.getProgress();
+            int transferIntervalMillis = mAutoTransferInterval.getMillis();
+            boolean downloadContinuousReading = mDownloadContinuousReading.isChecked();
 
             boolean oldReadingFullscreen = Settings.getReadingFullscreen();
 
@@ -1246,7 +1437,8 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
             Settings.putReadingDirection(layoutMode);
             Settings.putPageScaling(scaleMode);
             Settings.putStartPosition(startPosition);
-            Settings.putStartTransferTime(transferTime);
+            Settings.putAutoTransferIntervalMillis(transferIntervalMillis);
+            Settings.putDownloadContinuousReading(downloadContinuousReading);
             Settings.putKeepScreenOn(keepScreenOn);
             Settings.putShowClock(showClock);
             Settings.putShowProgress(showProgress);
@@ -1304,10 +1496,12 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
             // Update slider
             mLayoutMode = layoutMode;
             updateSlider();
+            restartAutoTransferIfRunning();
 
             if (oldReadingFullscreen != readingFullscreen) {
                 recreate();
             }
+            return true;
         }
     }
 
@@ -1332,7 +1526,18 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
         private void onTapMenuArea() {
             AlertDialog.Builder builder = new AlertDialog.Builder(GalleryActivity.this);
             GalleryMenuHelper helper = new GalleryMenuHelper(builder.getContext());
-            builder.setTitle(R.string.gallery_menu_title).setView(helper.getView()).setPositiveButton(android.R.string.ok, helper).show();
+            AlertDialog dialog = builder.setTitle(R.string.gallery_menu_title)
+                    .setView(helper.getView())
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .setPositiveButton(android.R.string.ok, null)
+                    .create();
+            dialog.setOnShowListener(ignored -> dialog.getButton(
+                    DialogInterface.BUTTON_POSITIVE).setOnClickListener(view -> {
+                        if (helper.apply()) {
+                            dialog.dismiss();
+                        }
+                    }));
+            dialog.show();
         }
 
         private void onTapSliderArea() {
@@ -1408,6 +1613,7 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
 
             if (mGalleryProvider != null) {
                 int size = mGalleryProvider.size();
+                maybeShowQueuedProviderError(size);
                 NotifyTask task = mNotifyTaskPool.pop();
                 if (task == null) {
                     task = new NotifyTask();
@@ -1416,6 +1622,30 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
                 SimpleHandler.getInstance().post(task);
             }
         }
+    }
+
+    private void maybeShowQueuedProviderError(int providerSize) {
+        boolean queuedTransition = mDownloadReadingQueue != null
+                && mDownloadReadingIndex >= 0
+                && mDownloadReadingStartIndex >= 0
+                && mDownloadReadingIndex != mDownloadReadingStartIndex;
+        if (!DownloadReadingNoticePolicy.shouldShowProviderError(
+                queuedTransition, mQueueProviderErrorShown,
+                providerSize == GalleryProvider.STATE_ERROR)) {
+            return;
+        }
+        mQueueProviderErrorShown = true;
+        String providerError = mGalleryProvider != null ? mGalleryProvider.getError() : null;
+        String reason = TextUtils.isEmpty(providerError)
+                ? getString(R.string.error_reading_failed)
+                : providerError;
+        runOnUiThread(() -> {
+            if (!isFinishing() && !isDestroyed()) {
+                Toast.makeText(getApplicationContext(), getString(
+                        R.string.download_reading_queue_open_failed_reason, reason),
+                        Toast.LENGTH_LONG).show();
+            }
+        });
     }
 
 }

@@ -62,12 +62,17 @@
         app:entries="@array/start_position_entries"
         app:entryValues="@array/start_position_values" />
 
-    <com.hippo.preference.SeekBarPreference
-        android:defaultValue="2"
-        android:key="start_transfer_time"
+    <com.hippo.ehviewer.preference.AutoTransferIntervalPreference
+        android:key="auto_transfer_interval"
+        android:summary="@string/auto_transfer_interval_helper"
         android:title="@string/settings_read_auto_transfer_time"
-        app:allowDividerAbove="true"
-        app:max="15" />
+        app:allowDividerAbove="true" />
+
+    <com.hippo.preference.SwitchPreference
+        android:defaultValue="true"
+        android:key="download_continuous_reading"
+        android:summary="@string/settings_read_download_continuous_reading_summary"
+        android:title="@string/settings_read_download_continuous_reading" />
 
     <com.hippo.preference.SwitchPreference
         android:defaultValue="false"

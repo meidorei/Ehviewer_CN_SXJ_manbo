@@ -92,6 +92,7 @@ import com.hippo.ehviewer.ui.scene.sign.GetProfileScene;
 import com.hippo.ehviewer.ui.scene.topList.EhTopListScene;
 import com.hippo.ehviewer.ui.scene.history.HistoryScene;
 import com.hippo.ehviewer.ui.scene.ProgressScene;
+import com.hippo.ehviewer.ui.scene.gallery.list.BookmarkDiagnosticsScene;
 import com.hippo.ehviewer.ui.scene.gallery.list.QuickSearchScene;
 import com.hippo.ehviewer.ui.scene.gallery.list.LocalFollowScene;
 import com.hippo.ehviewer.ui.scene.SecurityScene;
@@ -186,6 +187,7 @@ public final class MainActivity extends StageActivity
         registerLaunchMode(GalleryListScene.class, SceneFragment.LAUNCH_MODE_SINGLE_TOP);
         registerLaunchMode(EhTopListScene.class, SceneFragment.LAUNCH_MODE_SINGLE_TOP);
         registerLaunchMode(QuickSearchScene.class, SceneFragment.LAUNCH_MODE_SINGLE_TASK);
+        registerLaunchMode(BookmarkDiagnosticsScene.class, SceneFragment.LAUNCH_MODE_SINGLE_TASK);
         registerLaunchMode(LocalFollowScene.class, SceneFragment.LAUNCH_MODE_SINGLE_TASK);
         registerLaunchMode(JmQueryScene.class, SceneFragment.LAUNCH_MODE_SINGLE_TASK);
         registerLaunchMode(SubscriptionsScene.class, SceneFragment.LAUNCH_MODE_SINGLE_TASK);
