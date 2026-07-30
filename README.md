@@ -45,8 +45,8 @@
 当前功能仅针对调试版构建和验证：
 
 - applicationId：`com.ehviewer.manbo.debug`
-- versionName：`2.0.2.9`
-- versionCode：`134`
+- versionName：`2.0.2.10`
+- versionCode：`135`
 - 正式版 versionCode 仍为 `112`
 
 Windows：
