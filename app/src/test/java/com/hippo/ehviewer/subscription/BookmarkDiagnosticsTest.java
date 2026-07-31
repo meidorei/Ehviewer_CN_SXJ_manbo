@@ -37,16 +37,42 @@ public class BookmarkDiagnosticsTest {
                 result.duplicateGroups.get(0).canonicalQuery);
     }
 
-    @Test public void differentModesAndFiltersStaySeparate() {
-        QuickSearch normal = search(1, ListUrlBuilder.MODE_NORMAL, "female:mom");
-        QuickSearch tag = search(2, ListUrlBuilder.MODE_TAG, "female:mom");
+    @Test public void tagAndNormalSingleExactTagShareOneDuplicateGroup() {
+        QuickSearch tag = search(1, ListUrlBuilder.MODE_TAG, "female:mom");
+        QuickSearch normal = search(2, ListUrlBuilder.MODE_NORMAL, "female:\"mom$\"");
         QuickSearch rated = search(3, ListUrlBuilder.MODE_NORMAL, "female:mom");
         rated.minRating = 4;
         QuickSearch paged = search(4, ListUrlBuilder.MODE_NORMAL, "female:mom");
         paged.pageFrom = 10;
 
         BookmarkDiagnostics.Result result =
-                BookmarkDiagnostics.analyze(Arrays.asList(normal, tag, rated, paged));
+                BookmarkDiagnostics.analyze(Arrays.asList(tag, normal, rated, paged));
+
+        assertEquals(1, result.duplicateGroups.size());
+        assertEquals(Arrays.asList(tag, normal),
+                result.duplicateGroups.get(0).bookmarks);
+    }
+
+    @Test public void spacedTagAndNormalExactTagShareOneDuplicateGroup() {
+        BookmarkDiagnostics.Result result = BookmarkDiagnostics.analyze(Arrays.asList(
+                search(1, ListUrlBuilder.MODE_TAG, "female:aaa bbb"),
+                search(2, ListUrlBuilder.MODE_NORMAL, "female:\"aaa bbb$\"")));
+
+        assertEquals(1, result.duplicateGroups.size());
+        assertEquals(2, result.duplicateBookmarks);
+        assertEquals("female:aaa bbb",
+                result.duplicateGroups.get(0).canonicalQuery);
+    }
+
+    @Test public void nonExactAndOtherModesDoNotCrossMatchTagMode() {
+        BookmarkDiagnostics.Result result = BookmarkDiagnostics.analyze(Arrays.asList(
+                search(1, ListUrlBuilder.MODE_TAG, "female:aaa bbb"),
+                search(2, ListUrlBuilder.MODE_NORMAL, "female:aaa bbb"),
+                search(3, ListUrlBuilder.MODE_FILTER, "female:\"aaa bbb$\""),
+                search(4, ListUrlBuilder.MODE_NORMAL,
+                        "female:\"aaa bbb$\" male:ccc"),
+                search(5, ListUrlBuilder.MODE_NORMAL, "-female:\"aaa bbb$\""),
+                search(6, ListUrlBuilder.MODE_NORMAL, "female:\"aaa bbb*\"")));
 
         assertTrue(result.duplicateGroups.isEmpty());
     }

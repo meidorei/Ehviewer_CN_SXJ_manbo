@@ -45,8 +45,8 @@
 当前功能仅针对调试版构建和验证：
 
 - applicationId：`com.ehviewer.manbo.debug`
-- versionName：`2.0.2.10`
-- versionCode：`135`
+- versionName：`2.0.2.11`
+- versionCode：`136`
 - 正式版 versionCode 仍为 `112`
 
 Windows：
@@ -138,7 +138,7 @@ type:aaa bbb
 - 重复书签：忽略书签名称、ID 和创建时间，在搜索模式、分类、进阶搜索、评分与页数条件均相同的前提下比较规范化查询；
 - 直接降级：只列出因保存的查询语法无法由 `BookmarkGlobalMatcher` 精确重现、在全局扫描开始前就确定会进入逐书签队列的项目。
 
-重复判断会统一大小写、连续空白、标签值或整个标签的外层引号、末尾 `$`、`l`／`lang`／`language` 别名以及纯 AND 标签顺序。因此 `female:mom`、`female:mom$`、`"female:mom"` 和 `female:"mom"` 属于同一查询。不同搜索模式或附加筛选条件仍视为不同书签，复杂表达式采用保守原文比较，避免推测性误报。
+重复判断会统一大小写、连续空白、标签值或整个标签的外层引号、末尾 `$`、`l`／`lang`／`language` 别名以及纯 AND 标签顺序。因此 `female:mom`、`female:mom$`、`"female:mom"` 和 `female:"mom"` 属于同一查询。合法的标签模式单标签还会与普通模式中的单个正向精确标准标签跨模式比较，因此 `female:aaa bbb` 与 `female:"aaa bbb$"` 可以归入同一重复组；其他不同搜索模式或附加筛选条件仍视为不同书签，复杂表达式采用保守原文比较，避免推测性误报。
 
 报告不会把 checkpoint 桥接或达到全局扫描页数上限造成的运行时降级列为“直接降级”。重复组支持逐条确认删除，删除后同步清理书签 checkpoint 与更新状态，并立即刷新报告和右侧抽屉。
 

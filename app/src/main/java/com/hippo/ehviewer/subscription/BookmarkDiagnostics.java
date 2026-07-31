@@ -23,7 +23,7 @@ public final class BookmarkDiagnostics {
         for (QuickSearch search : source) {
             if (search == null) continue;
             CanonicalQuery canonical = canonicalize(search);
-            DuplicateKey key = new DuplicateKey(search, canonical.value);
+            DuplicateKey key = new DuplicateKey(search, canonical);
             grouped.computeIfAbsent(key, ignored -> new ArrayList<>()).add(search);
 
             BookmarkUpdatePolicy.Result policy = BookmarkUpdatePolicy.validate(search);
@@ -53,12 +53,14 @@ public final class BookmarkDiagnostics {
         String keyword = search.keyword == null ? "" : search.keyword;
         if (search.mode == ListUrlBuilder.MODE_TAG) {
             String tag = BookmarkQueryNormalizer.normalizeStandaloneTag(keyword);
-            return new CanonicalQuery(tag == null
-                    ? BookmarkQueryNormalizer.conservativeKeyword(keyword) : tag);
+            return tag == null
+                    ? new CanonicalQuery(
+                            BookmarkQueryNormalizer.conservativeKeyword(keyword), false)
+                    : new CanonicalQuery(tag, true);
         }
         if (search.mode == ListUrlBuilder.MODE_UPLOADER) {
             return new CanonicalQuery(BookmarkQueryNormalizer.cleanValue(keyword)
-                    .toLowerCase(Locale.ROOT));
+                    .toLowerCase(Locale.ROOT), false);
         }
         if (search.mode == ListUrlBuilder.MODE_NORMAL
                 || search.mode == ListUrlBuilder.MODE_FILTER) {
@@ -66,10 +68,20 @@ public final class BookmarkDiagnostics {
                     BookmarkQueryNormalizer.parseExactQuery(keyword);
             if (parsed.exact) {
                 return new CanonicalQuery(
-                        BookmarkQueryNormalizer.canonicalExactQuery(parsed.tokens));
+                        BookmarkQueryNormalizer.canonicalExactQuery(parsed.tokens),
+                        search.mode == ListUrlBuilder.MODE_NORMAL
+                                && isSinglePositiveStandardTag(parsed.tokens));
             }
         }
-        return new CanonicalQuery(BookmarkQueryNormalizer.conservativeKeyword(keyword));
+        return new CanonicalQuery(
+                BookmarkQueryNormalizer.conservativeKeyword(keyword), false);
+    }
+
+    private static boolean isSinglePositiveStandardTag(
+            List<BookmarkQueryNormalizer.QueryToken> tokens) {
+        if (tokens.size() != 1) return false;
+        BookmarkQueryNormalizer.QueryToken token = tokens.get(0);
+        return !token.negative && !"uploader".equals(token.namespace);
     }
 
     public static final class Result {
@@ -112,9 +124,11 @@ public final class BookmarkDiagnostics {
 
     private static final class CanonicalQuery {
         final String value;
+        final boolean crossModeTagEquivalent;
 
-        CanonicalQuery(String value) {
+        CanonicalQuery(String value, boolean crossModeTagEquivalent) {
             this.value = value;
+            this.crossModeTagEquivalent = crossModeTagEquivalent;
         }
     }
 
@@ -127,14 +141,15 @@ public final class BookmarkDiagnostics {
         final int pageTo;
         final String canonicalQuery;
 
-        DuplicateKey(QuickSearch search, String canonicalQuery) {
-            mode = search.mode;
+        DuplicateKey(QuickSearch search, CanonicalQuery canonical) {
+            mode = canonical.crossModeTagEquivalent
+                    ? ListUrlBuilder.MODE_TAG : search.mode;
             category = search.category;
             advanceSearch = search.advanceSearch;
             minRating = search.minRating;
             pageFrom = search.pageFrom;
             pageTo = search.pageTo;
-            this.canonicalQuery = canonicalQuery;
+            canonicalQuery = canonical.value;
         }
 
         @Override public boolean equals(Object other) {
