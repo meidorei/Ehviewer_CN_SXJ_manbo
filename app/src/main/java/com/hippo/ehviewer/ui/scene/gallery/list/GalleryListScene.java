@@ -125,6 +125,7 @@ import com.hippo.ehviewer.subscription.SubscriptionUpdateCalculator;
 import com.hippo.ehviewer.subscription.LocalFollowRepository;
 import com.hippo.ehviewer.subscription.LocalGlobalCursorStore;
 import com.hippo.ehviewer.subscription.LocalRefreshJobStore;
+import com.hippo.ehviewer.subscription.LocalUnreadOpenPolicy;
 import com.hippo.ehviewer.subscription.LocalUpdateService;
 import com.hippo.ehviewer.util.TagTranslationUtil;
 import com.hippo.ehviewer.widget.GalleryInfoContentHelper;
@@ -2253,10 +2254,12 @@ public final class GalleryListScene extends BaseScene
     private void handleSuccessfulFeed(GalleryListParser.Result result) {
         FeedSourceContext context = mFeedSourceContext;
         if (context == null || mUrlBuilder == null
-                || mUrlBuilder.getPageIndex() != 0 || result.galleryInfoList.isEmpty()
+                || mUrlBuilder.getPageIndex() != 0
                 || mUnreadClearedForContext
                 || (context.type != FeedSourceContext.Type.SUBSCRIPTION_TAG
                 && context.type != FeedSourceContext.Type.QUICK_SEARCH)) return;
+        if (!LocalUnreadOpenPolicy.shouldComplete(
+                context.type, result.galleryInfoList.isEmpty())) return;
         mUnreadClearedForContext = true;
         FeedBoundary openedTop = LocalFollowRepository.boundaryOf(result.galleryInfoList);
         long unreadSnapshotRowId = mUnreadSnapshotAt;

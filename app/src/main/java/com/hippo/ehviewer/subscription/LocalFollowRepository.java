@@ -284,15 +284,18 @@ public final class LocalFollowRepository {
      */
     public void completeSuccessfulOpen(String sourceType, String sourceKey, String signature,
                                        FeedBoundary pageTop, long unreadSnapshotRowId) {
-        if (pageTop == null || pageTop.isEmpty()) return;
+        boolean hasPageTop = pageTop != null && !pageTop.isEmpty();
+        if (!hasPageTop && !SOURCE_BOOKMARK.equals(sourceType)) return;
         String checkpointType = SOURCE_FOLLOW.equals(sourceType)
                 ? CHECKPOINT_FOLLOW_OPEN : CHECKPOINT_BOOKMARK_OPEN;
         Database db = EhDB.getDatabase();
         db.beginTransaction();
         try {
-            SubscriptionRepository.getInstance().advanceCheckpoint(
-                    new CheckpointKey(SHARED_OPEN_ACCOUNT, checkpointType,
-                            sourceKey, signature), pageTop);
+            if (hasPageTop) {
+                SubscriptionRepository.getInstance().advanceCheckpoint(
+                        new CheckpointKey(SHARED_OPEN_ACCOUNT, checkpointType,
+                                sourceKey, signature), pageTop);
+            }
             if (SOURCE_BOOKMARK.equals(sourceType)) {
                 Set<Long> openedGids = readUnreadSnapshotGids(
                         db, sourceType, sourceKey, unreadSnapshotRowId);
@@ -471,6 +474,24 @@ public final class LocalFollowRepository {
                 false, true);
     }
 
+    TagUpdateState commitBookmarkScan(
+            String sourceKey, String signature, CheckpointKey checkpointKey,
+            FeedBoundary synchronizedTop, BookmarkScanResult scan) {
+        if (scan == null) throw new IllegalArgumentException("null bookmark scan");
+        if (scan.galleries.isEmpty()) {
+            if (synchronizedTop == null || synchronizedTop.isEmpty()) {
+                markCheckedWithoutChanges(SOURCE_BOOKMARK, sourceKey, signature);
+                return readState(SOURCE_BOOKMARK, sourceKey, signature);
+            }
+            return commitPrepared(SOURCE_BOOKMARK, sourceKey, signature, checkpointKey,
+                    synchronizedTop, scan.galleries, false, scan.boundaryProven);
+        }
+        FeedBoundary commitTop = synchronizedTop == null || synchronizedTop.isEmpty()
+                ? scan.top : synchronizedTop;
+        return commitPrepared(SOURCE_BOOKMARK, sourceKey, signature, checkpointKey,
+                commitTop, scan.galleries, false, scan.boundaryProven);
+    }
+
     private TagUpdateState commitPrepared(
             String sourceType, String sourceKey, String signature,
             CheckpointKey checkpointKey, FeedBoundary newest,
@@ -481,16 +502,14 @@ public final class LocalFollowRepository {
         boolean reached = baseline || boundaryProven;
         List<Long> newGids = new ArrayList<>();
         if (!baseline) {
+            newGids.addAll(collectNewGids(old.current, matchingGalleries));
             for (GalleryInfo gallery : matchingGalleries) {
                 if (gallery.postedTimestamp <= 0) {
                     throw new IllegalArgumentException("gallery timestamp unavailable");
                 }
-                if (old.current.isFirstOld(gallery.postedTimestamp, gallery.gid)) {
+                if (gallery.postedTimestamp < old.current.time) {
                     reached = true;
                     break;
-                }
-                if (old.current.isNew(gallery.postedTimestamp, gallery.gid)) {
-                    newGids.add(gallery.gid);
                 }
             }
         }
@@ -506,11 +525,14 @@ public final class LocalFollowRepository {
                             new Object[]{sourceType, sourceKey, gid,
                                     System.currentTimeMillis()});
                 }
-                db.execSQL("DELETE FROM LOCAL_UNREAD_GALLERY WHERE SOURCE_TYPE=? AND SOURCE_KEY=? " +
-                                "AND GID NOT IN (SELECT GID FROM LOCAL_UNREAD_GALLERY " +
-                                "WHERE SOURCE_TYPE=? AND SOURCE_KEY=? " +
-                                "ORDER BY DETECTED_AT DESC,GID DESC LIMIT 21)",
-                        new Object[]{sourceType, sourceKey, sourceType, sourceKey});
+                if (UnreadRetentionPolicy.maxRows(sourceType)
+                        == UnreadRetentionPolicy.LOCAL_FOLLOW_LIMIT) {
+                    db.execSQL("DELETE FROM LOCAL_UNREAD_GALLERY WHERE SOURCE_TYPE=? AND SOURCE_KEY=? " +
+                                    "AND GID NOT IN (SELECT GID FROM LOCAL_UNREAD_GALLERY " +
+                                    "WHERE SOURCE_TYPE=? AND SOURCE_KEY=? " +
+                                    "ORDER BY DETECTED_AT DESC,GID DESC LIMIT 21)",
+                            new Object[]{sourceType, sourceKey, sourceType, sourceKey});
+                }
             }
             int count = 0;
             try (Cursor cursor = db.rawQuery(
@@ -531,6 +553,25 @@ public final class LocalFollowRepository {
             db.endTransaction();
         }
         return readState(sourceType, sourceKey, signature);
+    }
+
+    static List<Long> collectNewGids(FeedBoundary oldBoundary,
+                                     List<GalleryInfo> galleries) {
+        if (oldBoundary == null || oldBoundary.isEmpty()
+                || galleries == null || galleries.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Set<Long> result = new LinkedHashSet<>();
+        for (GalleryInfo gallery : galleries) {
+            if (gallery == null || gallery.postedTimestamp <= 0) {
+                throw new IllegalArgumentException("gallery timestamp unavailable");
+            }
+            if (gallery.postedTimestamp < oldBoundary.time) break;
+            if (oldBoundary.isNew(gallery.postedTimestamp, gallery.gid)) {
+                result.add(gallery.gid);
+            }
+        }
+        return Collections.unmodifiableList(new ArrayList<>(result));
     }
 
     public void establishBaseline(String sourceType, String sourceKey, String signature,
