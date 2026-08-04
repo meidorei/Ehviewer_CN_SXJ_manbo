@@ -30,7 +30,7 @@ final class LocalUpdateStartDialog {
 
     private LocalUpdateStartDialog() {}
 
-    static void showFollow(Context context, boolean recommendGlobal, long lastSuccess,
+    static void showFollow(Context context, boolean recommendGlobal, long globalCursorTime,
                            Starter starter) {
         View content = LayoutInflater.from(context).inflate(
                 R.layout.dialog_local_follow_update, null, false);
@@ -40,11 +40,11 @@ final class LocalUpdateStartDialog {
         RadioButton tags = content.findViewById(R.id.local_update_method_tags);
         int pageLimit = Settings.getGlobalScanPageLimit();
 
-        history.setText(lastSuccess <= 0
-                ? context.getString(R.string.local_update_no_full_success)
-                : context.getString(R.string.local_update_last_full_success,
+        history.setText(globalCursorTime <= 0
+                ? context.getString(R.string.local_update_no_global_cursor)
+                : context.getString(R.string.local_update_global_cursor,
                 LocalRefreshStatusFormatter.formatTime(
-                        lastSuccess, System.currentTimeMillis())));
+                        globalCursorTime, System.currentTimeMillis())));
         setMethodText(context, global, recommendGlobal
                 ? R.string.local_update_method_global_recommended
                 : R.string.local_update_method_global, pageLimit);
@@ -89,7 +89,7 @@ final class LocalUpdateStartDialog {
     }
 
     static void showBookmarks(Context context, int count, boolean recommendGlobal,
-                              long lastSuccess, Starter starter) {
+                              long globalCursorTime, Starter starter) {
         View content = LayoutInflater.from(context).inflate(
                 R.layout.dialog_local_follow_update, null, false);
         TextView history = content.findViewById(R.id.local_update_history);
@@ -98,11 +98,11 @@ final class LocalUpdateStartDialog {
         RadioButton bookmarks = content.findViewById(R.id.local_update_method_tags);
         int pageLimit = Settings.getGlobalScanPageLimit();
 
-        String last = lastSuccess <= 0
-                ? context.getString(R.string.local_update_no_full_success)
-                : context.getString(R.string.local_update_last_full_success,
+        String last = globalCursorTime <= 0
+                ? context.getString(R.string.local_update_no_global_cursor)
+                : context.getString(R.string.local_update_global_cursor,
                 LocalRefreshStatusFormatter.formatTime(
-                        lastSuccess, System.currentTimeMillis()));
+                        globalCursorTime, System.currentTimeMillis()));
         history.setText(context.getString(R.string.bookmark_update_history, count, last));
         setMethodText(context, global, recommendGlobal
                 ? R.string.bookmark_update_method_global_recommended

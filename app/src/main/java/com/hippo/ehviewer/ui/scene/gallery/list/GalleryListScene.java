@@ -123,6 +123,7 @@ import com.hippo.ehviewer.subscription.SubscriptionRefreshStatus;
 import com.hippo.ehviewer.subscription.SubscriptionSnapshot;
 import com.hippo.ehviewer.subscription.SubscriptionUpdateCalculator;
 import com.hippo.ehviewer.subscription.LocalFollowRepository;
+import com.hippo.ehviewer.subscription.LocalGlobalCursorStore;
 import com.hippo.ehviewer.subscription.LocalRefreshJobStore;
 import com.hippo.ehviewer.subscription.LocalUpdateService;
 import com.hippo.ehviewer.util.TagTranslationUtil;
@@ -1292,10 +1293,12 @@ public final class GalleryListScene extends BaseScene
             if (mSubscriptionDraw != null) mSubscriptionDraw.showRefreshDetails();
             return;
         }
-        long last = LocalRefreshJobStore.lastFollowSuccess();
-        boolean recommendGlobal = last == 0
-                || System.currentTimeMillis() - last <= 5L * 24L * 60L * 60L * 1000L;
-        LocalUpdateStartDialog.showFollow(context, recommendGlobal, last, method -> {
+        long lastSuccess = LocalRefreshJobStore.lastFollowSuccess();
+        boolean recommendGlobal = lastSuccess == 0
+                || System.currentTimeMillis() - lastSuccess <= 5L * 24L * 60L * 60L * 1000L;
+        long globalCursorTime = LocalGlobalCursorStore.readCurrent(
+                context, LocalGlobalCursorStore.TYPE_FOLLOW).timeMillis();
+        LocalUpdateStartDialog.showFollow(context, recommendGlobal, globalCursorTime, method -> {
             if (Build.VERSION.SDK_INT >= 33
                     && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
                     != PackageManager.PERMISSION_GRANTED) {

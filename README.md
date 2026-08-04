@@ -45,8 +45,8 @@
 当前功能仅针对调试版构建和验证：
 
 - applicationId：`com.ehviewer.manbo.debug`
-- versionName：`2.0.2.13`
-- versionCode：`138`
+- versionName：`2.0.2.14`
+- versionCode：`139`
 - 正式版 versionCode 仍为 `112`
 
 Windows：
@@ -66,6 +66,8 @@ Linux：
 ```text
 app/build/outputs/apk/appRelease/debug/app-appRelease-debug.apk
 ```
+
+当前 v139 APK 大小为 `32573351` 字节，SHA-256 为 `F9F234102A98497CF4AA0F61F8BEACBDFFFFE87F3BC3E859677619EE352F0B34`，`output-metadata.json` 确认变体为 `appReleaseDebug`。
 
 ------
 

@@ -1122,8 +1122,8 @@
     <string name="local_update_preparing">准备中</string>
     <string name="local_update_global_progress">%1$s · %2$d 页 / %3$d 本</string>
     <string name="local_update_item_progress">%1$s · %2$d/%3$d · %4$s</string>
-    <string name="local_update_no_full_success">尚无完整成功检查记录</string>
-    <string name="local_update_last_full_success">上次完整成功检查：%1$s</string>
+    <string name="local_update_no_global_cursor">尚无全局扫描边界</string>
+    <string name="local_update_global_cursor">下次全局扫描截止：%1$s</string>
     <string name="local_update_last_full_attempt">上次完整检查：%1$s</string>
     <string name="local_update_method_global">全局中文扫描\n最多扫描 %1$d 页，未覆盖的标签会自动改为逐标签检查。</string>
     <string name="local_update_method_global_recommended">全局中文扫描（推荐）\n最多扫描 %1$d 页，未覆盖的标签会自动改为逐标签检查。</string>

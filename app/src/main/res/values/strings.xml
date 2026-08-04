@@ -1211,8 +1211,8 @@
     <string name="local_update_preparing">Preparing</string>
     <string name="local_update_global_progress">%1$s · %2$d pages / %3$d galleries</string>
     <string name="local_update_item_progress">%1$s · %2$d/%3$d · %4$s</string>
-    <string name="local_update_no_full_success">No completed successful check yet</string>
-    <string name="local_update_last_full_success">Last completed successful check: %1$s</string>
+    <string name="local_update_no_global_cursor">No global scan boundary yet</string>
+    <string name="local_update_global_cursor">Next global scan stops at: %1$s</string>
     <string name="local_update_last_full_attempt">Last full check: %1$s</string>
     <string name="local_update_method_global">Global Chinese scan\nScan up to %1$d pages; uncovered tags automatically fall back to a per-tag check.</string>
     <string name="local_update_method_global_recommended">Global Chinese scan (Recommended)\nScan up to %1$d pages; uncovered tags automatically fall back to a per-tag check.</string>

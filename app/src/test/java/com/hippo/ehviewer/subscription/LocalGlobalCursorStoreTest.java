@@ -36,6 +36,12 @@ public class LocalGlobalCursorStoreTest {
         assertTrue(LocalGlobalCursorStore.oldest(checkpoints).isEmpty());
     }
 
+    @Test public void boundaryConvertsUnixSecondsForUiFormatting() {
+        assertEquals(1_750_000_000_000L,
+                new FeedBoundary(1_750_000_000L, new LinkedHashSet<>()).timeMillis());
+        assertEquals(0, FeedBoundary.EMPTY.timeMillis());
+    }
+
     private static FeedCheckpoint checkpoint(long time, Long... gids) {
         return new FeedCheckpoint(FeedBoundary.EMPTY,
                 new FeedBoundary(time, new LinkedHashSet<>(Arrays.asList(gids))), time);
