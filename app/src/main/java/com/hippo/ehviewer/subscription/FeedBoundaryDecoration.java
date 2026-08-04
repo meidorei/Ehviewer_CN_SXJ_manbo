@@ -3,6 +3,7 @@ package com.hippo.ehviewer.subscription;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.graphics.Typeface;
 import android.view.View;
 
 import androidx.annotation.NonNull;
@@ -24,12 +25,25 @@ public final class FeedBoundaryDecoration extends RecyclerView.ItemDecoration {
                                   String label, ItemProvider provider) {
         this.provider = provider;
         this.label = label;
-        this.height = Math.round(32 * density);
+        this.height = markerHeightPx(density);
         linePaint.setColor(color);
-        linePaint.setStrokeWidth(Math.max(1, density));
+        linePaint.setStrokeWidth(lineWidthPx(density));
         textPaint.setColor(color);
-        textPaint.setTextSize(13 * scaledDensity);
+        textPaint.setTextSize(textSizePx(scaledDensity));
+        textPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
         textPaint.setTextAlign(Paint.Align.CENTER);
+    }
+
+    static int markerHeightPx(float density) {
+        return Math.round(32 * density);
+    }
+
+    static float lineWidthPx(float density) {
+        return Math.max(1, 2 * density);
+    }
+
+    static float textSizePx(float scaledDensity) {
+        return 14 * scaledDensity;
     }
 
     public void setBoundary(FeedBoundary value) {

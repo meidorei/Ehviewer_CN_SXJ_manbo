@@ -9,8 +9,10 @@ import org.greenrobot.greendao.database.Database;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import com.hippo.ehviewer.client.data.GalleryInfo;
 import com.hippo.ehviewer.dao.QuickSearch;
@@ -291,9 +293,31 @@ public final class LocalFollowRepository {
             SubscriptionRepository.getInstance().advanceCheckpoint(
                     new CheckpointKey(SHARED_OPEN_ACCOUNT, checkpointType,
                             sourceKey, signature), pageTop);
-            db.execSQL("DELETE FROM LOCAL_UNREAD_GALLERY WHERE SOURCE_TYPE=? AND SOURCE_KEY=? " +
-                            "AND rowid<=?",
-                    new Object[]{sourceType, sourceKey, unreadSnapshotRowId});
+            if (SOURCE_BOOKMARK.equals(sourceType)) {
+                Set<Long> openedGids = readUnreadSnapshotGids(
+                        db, sourceType, sourceKey, unreadSnapshotRowId);
+                Map<String, Set<Long>> unreadByBookmark = readBookmarkUnreadGids(db);
+                Map<String, Integer> remainingByBookmark =
+                        BookmarkUnreadClearPolicy.remainingCounts(
+                                sourceType, openedGids, unreadByBookmark);
+                for (Long gid : openedGids) {
+                    db.execSQL("DELETE FROM LOCAL_UNREAD_GALLERY " +
+                                    "WHERE SOURCE_TYPE=? AND GID=?",
+                            new Object[]{SOURCE_BOOKMARK, gid});
+                }
+                for (Map.Entry<String, Integer> entry : remainingByBookmark.entrySet()) {
+                    if (sourceKey.equals(entry.getKey())) continue;
+                    // Preserve the other bookmark's state, error and checked time. In
+                    // particular, a lower-bound state must remain 20+ after shared clearing.
+                    db.execSQL("UPDATE LOCAL_UPDATE_STATE SET COUNT=? " +
+                                    "WHERE SOURCE_TYPE=? AND SOURCE_KEY=?",
+                            new Object[]{entry.getValue(), SOURCE_BOOKMARK, entry.getKey()});
+                }
+            } else {
+                db.execSQL("DELETE FROM LOCAL_UNREAD_GALLERY " +
+                                "WHERE SOURCE_TYPE=? AND SOURCE_KEY=? AND rowid<=?",
+                        new Object[]{sourceType, sourceKey, unreadSnapshotRowId});
+            }
             int remaining = unreadCount(db, sourceType, sourceKey);
             db.execSQL("UPDATE LOCAL_UPDATE_STATE SET COUNT=?,COUNT_STATE='EXACT',ERROR='',CHECKED_AT=? " +
                             "WHERE SOURCE_TYPE=? AND SOURCE_KEY=?",
@@ -302,6 +326,31 @@ public final class LocalFollowRepository {
         } finally {
             db.endTransaction();
         }
+    }
+
+    private static Set<Long> readUnreadSnapshotGids(
+            Database db, String sourceType, String sourceKey, long snapshotRowId) {
+        Set<Long> result = new LinkedHashSet<>();
+        try (Cursor cursor = db.rawQuery(
+                "SELECT GID FROM LOCAL_UNREAD_GALLERY " +
+                        "WHERE SOURCE_TYPE=? AND SOURCE_KEY=? AND rowid<=?",
+                new String[]{sourceType, sourceKey, Long.toString(snapshotRowId)})) {
+            while (cursor.moveToNext()) result.add(cursor.getLong(0));
+        }
+        return result;
+    }
+
+    private static Map<String, Set<Long>> readBookmarkUnreadGids(Database db) {
+        Map<String, Set<Long>> result = new LinkedHashMap<>();
+        try (Cursor cursor = db.rawQuery(
+                "SELECT SOURCE_KEY,GID FROM LOCAL_UNREAD_GALLERY WHERE SOURCE_TYPE=?",
+                new String[]{SOURCE_BOOKMARK})) {
+            while (cursor.moveToNext()) {
+                result.computeIfAbsent(cursor.getString(0), ignored -> new LinkedHashSet<>())
+                        .add(cursor.getLong(1));
+            }
+        }
+        return result;
     }
 
     private static int unreadCount(Database db, String sourceType, String sourceKey) {

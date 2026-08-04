@@ -807,7 +807,7 @@ public final class GalleryListScene extends BaseScene
                 mRecyclerView, Settings.getListMode());
         mFeedBoundaryDecoration = new FeedBoundaryDecoration(
                 resources.getDisplayMetrics().density, resources.getDisplayMetrics().scaledDensity,
-                AttrResources.getAttrColor(context, android.R.attr.textColorSecondary),
+                AttrResources.getAttrColor(context, androidx.appcompat.R.attr.colorPrimary),
                 getString(R.string.last_update_marker), position -> {
                     if (mHelper == null || position < 0 || position >= mHelper.getData().size()) return null;
                     return mHelper.getDataAtEx(position);

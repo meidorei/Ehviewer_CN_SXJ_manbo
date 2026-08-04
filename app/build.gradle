@@ -8,6 +8,9 @@ if (file('google-services.json').exists()) {
     apply plugin: 'com.google.firebase.crashlytics'
 }
 
+def hostDebugKeystore = System.getenv('USERPROFILE') == null
+        ? null : file("${System.getenv('USERPROFILE')}/.android/debug.keystore")
+
 android {
     namespace 'com.hippo.ehviewer'
     testNamespace 'com.hippo.ehviewer.debug'
@@ -31,7 +34,7 @@ android {
         //noinspection ExpiredTargetSdkVersion
         targetSdkVersion 30
         versionCode 112
-        versionName "2.0.2.11"
+        versionName "2.0.2.13"
         vectorDrawables.useSupportLibrary = true
         resourceConfigurations += ['zh', 'zh-rCN', 'zh-rHK', 'zh-rTW', 'es', 'ja', 'ko', 'fr', 'de', 'th']
         testOptions.unitTests.includeAndroidResources = true
@@ -54,6 +57,19 @@ android {
         checkReleaseBuilds true
     }
 
+    signingConfigs {
+        debug {
+            // Codex runs Gradle with a sandboxed Java user.home. Prefer the Windows user's
+            // standard debug key so locally built updates keep the phone's existing signer.
+            if (hostDebugKeystore != null && hostDebugKeystore.isFile()) {
+                storeFile hostDebugKeystore
+                storePassword 'android'
+                keyAlias 'androiddebugkey'
+                keyPassword 'android'
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
@@ -69,7 +85,7 @@ android {
     applicationVariants.all { variant ->
         if (variant.buildType.name == "debug") {
             variant.outputs.all { output ->
-                output.versionCodeOverride = 136
+                output.versionCodeOverride = 138
             }
         }
     }
