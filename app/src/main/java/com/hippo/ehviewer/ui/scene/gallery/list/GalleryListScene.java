@@ -39,8 +39,11 @@ import android.text.TextUtils;
 import android.text.style.ImageSpan;
 import android.util.Log;
 import android.view.Display;
+import android.view.GestureDetector;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
@@ -183,6 +186,7 @@ public final class GalleryListScene extends BaseScene
     private FeedSourceContext mFeedSourceContext;
     private FeedBoundary mVisibleFeedBoundary = FeedBoundary.EMPTY;
     private FeedBoundaryDecoration mFeedBoundaryDecoration;
+    private RecyclerView.OnItemTouchListener mFeedBoundaryTouchListener;
     private boolean mUnreadClearedForContext;
     private long mUnreadSnapshotAt;
 
@@ -468,7 +472,7 @@ public final class GalleryListScene extends BaseScene
         }
     }
 
-    private void resetHomeBoundary() {
+    private void confirmHomeBoundaryReset() {
         FeedSourceContext context = mFeedSourceContext;
         Context uiContext = getEHContext();
         if (context == null || context.type != FeedSourceContext.Type.HOME
@@ -479,6 +483,16 @@ public final class GalleryListScene extends BaseScene
                     Toast.LENGTH_SHORT).show();
             return;
         }
+        new AlertDialog.Builder(uiContext)
+                .setTitle(R.string.home_boundary_reset_confirm_title)
+                .setMessage(R.string.home_boundary_reset_confirm_message)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.home_boundary_reset_confirm_action,
+                        (dialog, which) -> resetHomeBoundary(context, boundary))
+                .show();
+    }
+
+    private void resetHomeBoundary(FeedSourceContext context, FeedBoundary boundary) {
         SubscriptionRepository repository = SubscriptionRepository.getInstance();
         repository.execute(() -> {
             try {
@@ -512,6 +526,15 @@ public final class GalleryListScene extends BaseScene
                 });
             }
         });
+    }
+
+    private boolean isHomeBoundaryTouch(MotionEvent event) {
+        return mFeedSourceContext != null
+                && mFeedSourceContext.type == FeedSourceContext.Type.HOME
+                && mRecyclerView != null
+                && mFeedBoundaryDecoration != null
+                && mFeedBoundaryDecoration.isInMarkerTouchArea(
+                        mRecyclerView, event.getX(), event.getY());
     }
 
     @Override
@@ -885,6 +908,29 @@ public final class GalleryListScene extends BaseScene
                 });
         mFeedBoundaryDecoration.setBoundary(mVisibleFeedBoundary);
         mRecyclerView.addItemDecoration(mFeedBoundaryDecoration);
+        GestureDetector boundaryGestureDetector = new GestureDetector(context,
+                new GestureDetector.SimpleOnGestureListener() {
+                    @Override
+                    public boolean onDown(MotionEvent event) {
+                        return isHomeBoundaryTouch(event);
+                    }
+
+                    @Override
+                    public void onLongPress(MotionEvent event) {
+                        if (!isHomeBoundaryTouch(event) || mRecyclerView == null) return;
+                        mRecyclerView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                        confirmHomeBoundaryReset();
+                    }
+                });
+        mFeedBoundaryTouchListener = new RecyclerView.SimpleOnItemTouchListener() {
+            @Override
+            public boolean onInterceptTouchEvent(@NonNull RecyclerView recyclerView,
+                                                 @NonNull MotionEvent event) {
+                boundaryGestureDetector.onTouchEvent(event);
+                return false;
+            }
+        };
+        mRecyclerView.addOnItemTouchListener(mFeedBoundaryTouchListener);
 
         mAdapter.setThumbItemClickListener(this::onThumbItemClick);
         mRecyclerView.setSelector(Ripple.generateRippleDrawable(context, !AttrResources.getAttrBoolean(context, androidx.appcompat.R.attr.isLightTheme), new ColorDrawable(Color.TRANSPARENT)));
@@ -1153,11 +1199,15 @@ public final class GalleryListScene extends BaseScene
         }
         if (null != mRecyclerView) {
             mRecyclerView.stopScroll();
+            if (mFeedBoundaryTouchListener != null) {
+                mRecyclerView.removeOnItemTouchListener(mFeedBoundaryTouchListener);
+            }
             if (mFeedBoundaryDecoration != null) {
                 mRecyclerView.removeItemDecoration(mFeedBoundaryDecoration);
             }
             mRecyclerView = null;
         }
+        mFeedBoundaryTouchListener = null;
         mFeedBoundaryDecoration = null;
         if (null != mFabLayout) {
             removeAboveSnackView(mFabLayout);
@@ -1836,7 +1886,7 @@ public final class GalleryListScene extends BaseScene
                 onItemClick(null, gInfoL.get((int) (Math.random() * gInfoL.size())));
                 break;
             case 4: // Reset the manually controlled homepage marker
-                resetHomeBoundary();
+                confirmHomeBoundaryReset();
                 break;
         }
 

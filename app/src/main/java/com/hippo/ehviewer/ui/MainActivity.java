@@ -91,6 +91,7 @@ import com.hippo.ehviewer.ui.scene.gallery.list.SubscriptionsScene;
 import com.hippo.ehviewer.ui.scene.sign.GetProfileScene;
 import com.hippo.ehviewer.ui.scene.topList.EhTopListScene;
 import com.hippo.ehviewer.ui.scene.history.HistoryScene;
+import com.hippo.ehviewer.ui.scene.reading.ReadingQueueScene;
 import com.hippo.ehviewer.ui.scene.ProgressScene;
 import com.hippo.ehviewer.ui.scene.gallery.list.BookmarkDiagnosticsScene;
 import com.hippo.ehviewer.ui.scene.gallery.list.QuickSearchScene;
@@ -199,6 +200,7 @@ public final class MainActivity extends StageActivity
         registerLaunchMode(DownloadLabelsScene.class, SceneFragment.LAUNCH_MODE_SINGLE_TASK);
         registerLaunchMode(FavoritesScene.class, SceneFragment.LAUNCH_MODE_SINGLE_TASK);
         registerLaunchMode(HistoryScene.class, SceneFragment.LAUNCH_MODE_SINGLE_TOP);
+        registerLaunchMode(ReadingQueueScene.class, SceneFragment.LAUNCH_MODE_SINGLE_TASK);
         registerLaunchMode(ProgressScene.class, SceneFragment.LAUNCH_MODE_STANDARD);
     }
 
@@ -950,6 +952,9 @@ public final class MainActivity extends StageActivity
                 break;
             case R.id.nav_downloads:
                 startScene(new Announcer(DownloadsScene.class));
+                break;
+            case R.id.nav_reading_queue:
+                startScene(new Announcer(ReadingQueueScene.class));
                 break;
             case R.id.nav_settings:
                 Intent intent = new Intent(this, SettingsActivity.class);

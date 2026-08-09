@@ -22,6 +22,8 @@ public class BookmarkScanAccumulatorTest {
 
         assertEquals(BookmarkScanResult.EndReason.BASELINE, result.endReason);
         assertFalse(result.boundaryProven);
+        assertTrue(result.newGids.isEmpty());
+        assertEquals(120, result.top.time);
         assertEquals(1, result.pages);
         assertEquals(2, result.galleryCount);
     }
@@ -35,6 +37,7 @@ public class BookmarkScanAccumulatorTest {
 
         assertEquals(BookmarkScanResult.EndReason.BOUNDARY, result.endReason);
         assertTrue(result.boundaryProven);
+        assertEquals(Arrays.asList(4L, 3L), result.newGids);
         assertEquals(2, result.pages);
         assertEquals(4, result.galleryCount);
     }
@@ -46,8 +49,7 @@ public class BookmarkScanAccumulatorTest {
         assertFalse(accumulator.addPage(galleries(gallery(99, 3)), false));
         BookmarkScanResult result = accumulator.finish();
 
-        assertEquals(3, result.galleries.size());
-        assertEquals(2, result.galleries.get(1).gid);
+        assertEquals(Collections.singletonList(2L), result.newGids);
         assertTrue(result.boundaryProven);
     }
 
@@ -59,6 +61,7 @@ public class BookmarkScanAccumulatorTest {
 
         assertEquals(BookmarkScanResult.EndReason.LIST_END, result.endReason);
         assertTrue(result.boundaryProven);
+        assertEquals(Arrays.asList(4L, 3L), result.newGids);
     }
 
     @Test public void duplicateGidsAreReturnedOnlyOnceButWorkCountStaysExact() {
@@ -68,8 +71,22 @@ public class BookmarkScanAccumulatorTest {
         assertFalse(accumulator.addPage(galleries(gallery(110, 3), gallery(99, 2)), false));
         BookmarkScanResult result = accumulator.finish();
 
-        assertEquals(3, result.galleries.size());
+        assertEquals(Arrays.asList(4L, 3L), result.newGids);
         assertEquals(4, result.galleryCount);
+    }
+
+    @Test public void emptyListEndProducesNoDeltaAndNoTop() {
+        BookmarkScanAccumulator accumulator = new BookmarkScanAccumulator(boundary(100, 1));
+
+        assertFalse(accumulator.addPage(Collections.emptyList(), false));
+        BookmarkScanResult result = accumulator.finish();
+
+        assertEquals(BookmarkScanResult.EndReason.LIST_END, result.endReason);
+        assertTrue(result.boundaryProven);
+        assertTrue(result.newGids.isEmpty());
+        assertTrue(result.top.isEmpty());
+        assertEquals(1, result.pages);
+        assertEquals(0, result.galleryCount);
     }
 
     @Test(expected = IllegalArgumentException.class)

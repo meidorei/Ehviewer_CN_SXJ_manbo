@@ -99,6 +99,21 @@
         app:allowDividerAbove="true"
         app:iconSpaceReserved="false" />
 
+    <com.hippo.preference.SwitchPreference
+        android:defaultValue="false"
+        android:key="reading_queue_auto_delete"
+        android:summary="@string/settings_reading_queue_auto_delete_summary"
+        android:title="@string/settings_reading_queue_auto_delete"
+        app:allowDividerAbove="true"
+        app:iconSpaceReserved="false" />
+
+    <androidx.preference.EditTextPreference
+        android:defaultValue="20"
+        android:key="reading_queue_capacity"
+        android:summary="@string/settings_reading_queue_capacity_summary"
+        android:title="@string/settings_reading_queue_capacity"
+        app:iconSpaceReserved="false" />
+
     <com.hippo.ehviewer.preference.RestoreDownloadPreference
         android:key="restore_download_items"
         android:summary="@string/settings_download_restore_download_items_summary"

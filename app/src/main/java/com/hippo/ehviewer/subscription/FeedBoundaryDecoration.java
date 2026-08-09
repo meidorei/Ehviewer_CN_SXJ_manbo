@@ -46,6 +46,10 @@ public final class FeedBoundaryDecoration extends RecyclerView.ItemDecoration {
         return 14 * scaledDensity;
     }
 
+    static boolean isWithinMarkerTouchBounds(float touchY, int childTop, int markerHeight) {
+        return touchY >= childTop - markerHeight && touchY < childTop;
+    }
+
     public void setBoundary(FeedBoundary value) {
         boundary = value == null ? FeedBoundary.EMPTY : value;
     }
@@ -57,6 +61,19 @@ public final class FeedBoundaryDecoration extends RecyclerView.ItemDecoration {
     private boolean isMarker(int position) {
         GalleryInfo item = provider.get(position);
         return item != null && boundary.isFirstOld(item.postedTimestamp, item.gid);
+    }
+
+    public boolean isInMarkerTouchArea(@NonNull RecyclerView parent, float touchX, float touchY) {
+        if (touchX < parent.getPaddingLeft()
+                || touchX >= parent.getWidth() - parent.getPaddingRight()) return false;
+        for (int i = 0; i < parent.getChildCount(); i++) {
+            View child = parent.getChildAt(i);
+            int position = parent.getChildAdapterPosition(child);
+            if (position < 0 || !isMarker(position)
+                    || position > 0 && isMarker(position - 1)) continue;
+            return isWithinMarkerTouchBounds(touchY, child.getTop(), height);
+        }
+        return false;
     }
 
     @Override public void getItemOffsets(@NonNull Rect outRect, @NonNull View view,

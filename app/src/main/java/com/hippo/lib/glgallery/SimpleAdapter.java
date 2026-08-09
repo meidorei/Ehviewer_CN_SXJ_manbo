@@ -124,6 +124,7 @@ public class SimpleAdapter extends GalleryView.Adapter implements GalleryProvide
                 }
                 page.setProgress(GalleryPageView.PROGRESS_GONE);
                 page.setError(null, null);
+                onPageDisplayed(index);
             } else {
                 // The image is recycled, request again.
                 // TODO request loop ?
@@ -131,6 +132,9 @@ public class SimpleAdapter extends GalleryView.Adapter implements GalleryProvide
             }
         }
     }
+
+    /** Called only after an image has been obtained and attached to a visible page. */
+    protected void onPageDisplayed(int index) {}
 
     @Override
     public void onPageFailed(int index, String error) {

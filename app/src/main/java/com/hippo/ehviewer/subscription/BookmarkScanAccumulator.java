@@ -3,14 +3,14 @@ package com.hippo.ehviewer.subscription;
 import com.hippo.ehviewer.client.data.GalleryInfo;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 
 /** Pure accumulation and stopping rules for a newest-first bookmark scan. */
 final class BookmarkScanAccumulator {
     private final FeedBoundary oldBoundary;
-    private final Map<Long, GalleryInfo> unique = new LinkedHashMap<>();
+    private final Set<Long> newGids = new LinkedHashSet<>();
     private FeedBoundary top = FeedBoundary.EMPTY;
     private int pages;
     private int galleryCount;
@@ -33,7 +33,10 @@ final class BookmarkScanAccumulator {
             if (gallery == null || gallery.postedTimestamp <= 0) {
                 throw new IllegalArgumentException("gallery timestamp unavailable");
             }
-            unique.putIfAbsent(gallery.gid, gallery);
+            if (!oldBoundary.isEmpty()
+                    && oldBoundary.isNew(gallery.postedTimestamp, gallery.gid)) {
+                newGids.add(gallery.gid);
+            }
         }
 
         if (oldBoundary.isEmpty()) {
@@ -55,7 +58,7 @@ final class BookmarkScanAccumulator {
 
     BookmarkScanResult finish() {
         if (endReason == null) throw new IllegalStateException("scan is incomplete");
-        return new BookmarkScanResult(new ArrayList<>(unique.values()), top,
+        return new BookmarkScanResult(new ArrayList<>(newGids), top,
                 boundaryProven, pages, galleryCount, endReason);
     }
 }

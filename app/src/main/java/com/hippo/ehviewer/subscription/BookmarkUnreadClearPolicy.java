@@ -10,6 +10,19 @@ import java.util.Set;
 final class BookmarkUnreadClearPolicy {
     private BookmarkUnreadClearPolicy() {}
 
+    static FeedBoundary boundaryToAdvance(
+            String openedSourceKey, String affectedSourceKey, int previousCount,
+            int remainingCount, TagUpdateState.State countState,
+            FeedBoundary synchronizedTop) {
+        if (openedSourceKey == null || openedSourceKey.equals(affectedSourceKey)
+                || previousCount <= 0 || remainingCount != 0
+                || countState != TagUpdateState.State.EXACT
+                || synchronizedTop == null || synchronizedTop.isEmpty()) {
+            return FeedBoundary.EMPTY;
+        }
+        return synchronizedTop;
+    }
+
     static Map<String, Integer> remainingCounts(
             String sourceType, Set<Long> openedGids,
             Map<String, ? extends Collection<Long>> unreadBySource) {

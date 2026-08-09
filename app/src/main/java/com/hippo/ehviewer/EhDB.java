@@ -56,6 +56,8 @@ import com.hippo.ehviewer.dao.QuickSearch;
 import com.hippo.ehviewer.dao.QuickSearchDao;
 import com.hippo.ehviewer.download.DownloadManager;
 import com.hippo.ehviewer.subscription.SubscriptionSchema;
+import com.hippo.ehviewer.reader.ReadingQueueRepository;
+import com.hippo.ehviewer.reader.ReadingQueueSchema;
 import com.hippo.ehviewer.subscription.LocalFollowRepository;
 import com.hippo.ehviewer.subscription.LocalUpdateService;
 import com.hippo.util.ExceptionUtils;
@@ -185,6 +187,8 @@ public class EhDB {
                 SubscriptionSchema.createTables(db);
             case 10: // 10 to 11, global scan cursor, open boundary and durable job timing
                 SubscriptionSchema.upgradeToV11(db);
+            case 11: // 11 to 12, durable local reading queue
+                ReadingQueueSchema.upgradeToV12(db);
         }
     }
 
@@ -987,6 +991,7 @@ public class EhDB {
                 if (!copyDao(sDaoSession.getFilterDao(), exportSession.getFilterDao()))
                     return false;
                 copyLocalFollowTags(sDaoSession.getDatabase(), db);
+                copyReadingQueue(sDaoSession.getDatabase(), db);
             }
 
             // Copy export db to data dir
@@ -1108,6 +1113,7 @@ public class EhDB {
             }
 
             mergeLocalFollowTags(db);
+            mergeReadingQueue(db, manager);
             LocalUpdateService.startPendingBaselines(context);
 
             return null;
@@ -1139,6 +1145,17 @@ public class EhDB {
         }
     }
 
+    private static void copyReadingQueue(org.greenrobot.greendao.database.Database source,
+                                         SQLiteDatabase target) {
+        try (Cursor cursor = source.rawQuery(
+                "SELECT GID,QUEUE_ORDER FROM READING_QUEUE ORDER BY QUEUE_ORDER", null)) {
+            while (cursor.moveToNext()) {
+                target.execSQL("INSERT OR REPLACE INTO READING_QUEUE(GID,QUEUE_ORDER) VALUES(?,?)",
+                        new Object[]{cursor.getLong(0), cursor.getLong(1)});
+            }
+        }
+    }
+
     private static void mergeLocalFollowTags(SQLiteDatabase source) {
         if (!hasTable(source, "LOCAL_FOLLOW_TAG")) return;
         org.greenrobot.greendao.database.Database target = sDaoSession.getDatabase();
@@ -1166,6 +1183,20 @@ public class EhDB {
             target.endTransaction();
         }
         com.hippo.ehviewer.subscription.SubscriptionSnapshot.refreshFromDatabase();
+    }
+
+    private static void mergeReadingQueue(SQLiteDatabase source, DownloadManager manager) {
+        if (!hasTable(source, ReadingQueueSchema.TABLE)) return;
+        ReadingQueueRepository repository = ReadingQueueRepository.getInstance();
+        try (Cursor cursor = source.rawQuery(
+                "SELECT GID FROM READING_QUEUE ORDER BY QUEUE_ORDER ASC", null)) {
+            while (cursor.moveToNext()) {
+                long gid = cursor.getLong(0);
+                if (manager.containDownloadInfo(gid)) {
+                    repository.markRead(gid);
+                }
+            }
+        }
     }
 
     private static boolean hasTable(SQLiteDatabase db, String table) {

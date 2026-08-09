@@ -377,8 +377,11 @@
     <string name="refresh">Refresh</string>
     <string name="last_update_marker">Last update reached here</string>
     <string name="home_boundary_marker">Last seen here</string>
-    <string name="home_boundary_reset_action">Move homepage marker to the latest loaded item</string>
-    <string name="home_boundary_reset_success">Homepage marker moved</string>
+    <string name="home_boundary_reset_action">Reset homepage marker to the top</string>
+    <string name="home_boundary_reset_confirm_title">Reset homepage marker?</string>
+    <string name="home_boundary_reset_confirm_message">Move “Last seen here” to the newest item currently loaded?</string>
+    <string name="home_boundary_reset_confirm_action">Reset to top</string>
+    <string name="home_boundary_reset_success">Homepage marker reset to the top</string>
     <string name="home_boundary_reset_unavailable">No valid homepage item to mark</string>
     <string name="home_boundary_reset_failed">Unable to move homepage marker</string>
     <string name="subscription_refresh_cooldown">Follow update is cooling down. Please try again shortly.</string>
@@ -1242,4 +1245,23 @@
     <string name="follow_namespace_mixed">Mixed</string>
     <string name="follow_namespace_other">Other</string>
     <string name="follow_namespace_reclass">Reclass</string>
+    <!-- Reading queue -->
+    <string name="reading_queue">Reading queue</string>
+    <string name="no_reading_queue">Downloaded galleries you open will appear here</string>
+    <string name="reading_queue_remove">Remove from reading queue</string>
+    <string name="reading_queue_remove_done">Removed from reading queue</string>
+    <string name="reading_queue_delete_download">Delete local download</string>
+    <string name="reading_queue_delete_confirm">Delete the local download for “%1$s”? This cannot be undone.</string>
+    <string name="reading_queue_delete_failed">Could not delete the local download. It was kept in the queue.</string>
+    <string name="reading_queue_delete_done">Local download deleted</string>
+    <string name="reading_queue_auto_deleted">Automatically deleted %1$d old downloads</string>
+    <string name="reading_queue_cleanup_result">Deleted %1$d downloads; %2$d could not be deleted</string>
+    <string name="settings_reading_queue_auto_delete">Automatically delete old reading-queue downloads</string>
+    <string name="settings_reading_queue_auto_delete_summary">Off by default. When enabled, the oldest fully downloaded galleries are deleted after the queue exceeds its limit.</string>
+    <string name="settings_reading_queue_capacity">Reading queue limit</string>
+    <string name="settings_reading_queue_capacity_summary">Keep 20 recently read downloads when automatic deletion is enabled</string>
+    <string name="settings_reading_queue_capacity_value">Keep %1$d recently read downloads when automatic deletion is enabled</string>
+    <string name="settings_reading_queue_capacity_invalid">Enter a whole number from 1 to 100</string>
+    <string name="settings_reading_queue_cleanup_title">Delete old downloads?</string>
+    <string name="settings_reading_queue_cleanup_message">This setting will delete the %1$d oldest downloads in the reading queue.</string>
 </resources>

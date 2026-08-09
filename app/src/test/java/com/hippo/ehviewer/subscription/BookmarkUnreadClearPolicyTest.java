@@ -1,6 +1,7 @@
 package com.hippo.ehviewer.subscription;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
@@ -81,6 +82,59 @@ public class BookmarkUnreadClearPolicyTest {
                 LocalFollowRepository.SOURCE_FOLLOW, gids(1), unread).isEmpty());
     }
 
+    @Test public void exactZeroAdvancesToRecordedUpdateTop() {
+        FeedBoundary updateTop = boundary(100, 10, 11);
+
+        FeedBoundary result = BookmarkUnreadClearPolicy.boundaryToAdvance(
+                "opened", "affected", 2, 0,
+                TagUpdateState.State.EXACT, updateTop);
+
+        assertSame(updateTop, result);
+        assertTrue(result.isFirstOld(100, 10));
+        assertTrue(result.isFirstOld(100, 11));
+        assertTrue(result.isNew(101, 12));
+    }
+
+    @Test public void partialClearDoesNotAdvanceBoundary() {
+        assertTrue(BookmarkUnreadClearPolicy.boundaryToAdvance(
+                "opened", "affected", 2, 1, TagUpdateState.State.EXACT,
+                boundary(100, 10)).isEmpty());
+    }
+
+    @Test public void lowerBoundZeroDoesNotAdvanceBoundary() {
+        assertTrue(BookmarkUnreadClearPolicy.boundaryToAdvance(
+                "opened", "affected", 20, 0, TagUpdateState.State.LOWER_BOUND,
+                boundary(100, 10)).isEmpty());
+    }
+
+    @Test public void emptySyncBoundaryDoesNotAdvanceBoundary() {
+        assertTrue(BookmarkUnreadClearPolicy.boundaryToAdvance(
+                "opened", "affected", 2, 0, TagUpdateState.State.EXACT,
+                FeedBoundary.EMPTY).isEmpty());
+    }
+
+    @Test public void openedBookmarkKeepsItsLoadedPageBoundary() {
+        assertTrue(BookmarkUnreadClearPolicy.boundaryToAdvance(
+                "same", "same", 2, 0, TagUpdateState.State.EXACT,
+                boundary(100, 10)).isEmpty());
+    }
+
+    @Test public void alreadyZeroBookmarkDoesNotAdvanceBoundary() {
+        assertTrue(BookmarkUnreadClearPolicy.boundaryToAdvance(
+                "opened", "affected", 0, 0, TagUpdateState.State.EXACT,
+                boundary(100, 10)).isEmpty());
+    }
+
+    @Test public void multipleExactZerosKeepTheirOwnRecordedUpdateTops() {
+        FeedBoundary firstTop = boundary(100, 10);
+        FeedBoundary secondTop = boundary(200, 20, 21);
+
+        assertSame(firstTop, BookmarkUnreadClearPolicy.boundaryToAdvance(
+                "opened", "first", 1, 0, TagUpdateState.State.EXACT, firstTop));
+        assertSame(secondTop, BookmarkUnreadClearPolicy.boundaryToAdvance(
+                "opened", "second", 2, 0, TagUpdateState.State.EXACT, secondTop));
+    }
+
     private static Map<String, Integer> calculate(
             Set<Long> opened, Map<String, Collection<Long>> unread) {
         return BookmarkUnreadClearPolicy.remainingCounts(
@@ -100,5 +154,9 @@ public class BookmarkUnreadClearPolicyTest {
         Set<Long> result = new LinkedHashSet<>();
         for (long value : values) result.add(value);
         return result;
+    }
+
+    private static FeedBoundary boundary(long time, long... values) {
+        return new FeedBoundary(time, gids(values));
     }
 }

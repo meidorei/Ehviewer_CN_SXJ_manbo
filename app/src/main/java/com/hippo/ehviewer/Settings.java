@@ -1567,6 +1567,31 @@ public class Settings {
         putBoolean(KEY_DOWNLOAD_LIST_PAGINATION, value);
     }
 
+    public static final String KEY_READING_QUEUE_AUTO_DELETE =
+            "reading_queue_auto_delete";
+    public static final String KEY_READING_QUEUE_CAPACITY = "reading_queue_capacity";
+
+    public static boolean getReadingQueueAutoDelete() {
+        return getBoolean(KEY_READING_QUEUE_AUTO_DELETE, false);
+    }
+
+    public static void putReadingQueueAutoDelete(boolean value) {
+        putBoolean(KEY_READING_QUEUE_AUTO_DELETE, value);
+    }
+
+    public static int getReadingQueueCapacity() {
+        int value = getIntFromStr(KEY_READING_QUEUE_CAPACITY,
+                com.hippo.ehviewer.reader.ReadingQueuePolicy.DEFAULT_CAPACITY);
+        if (!com.hippo.ehviewer.reader.ReadingQueuePolicy.isValidCapacity(value)) {
+            return com.hippo.ehviewer.reader.ReadingQueuePolicy.DEFAULT_CAPACITY;
+        }
+        return value;
+    }
+
+    public static void putReadingQueueCapacity(int value) {
+        putIntToStr(KEY_READING_QUEUE_CAPACITY, value);
+    }
+
     public static final String KEY_SHOW_READ_PROGRESS = "show_read_progress";
 
     private static boolean IS_SHOW_READ_PROGRESS = true;

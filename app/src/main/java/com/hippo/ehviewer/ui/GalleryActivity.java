@@ -82,6 +82,7 @@ import com.hippo.ehviewer.gallery.GalleryProvider2;
 import com.hippo.ehviewer.reader.AutoTransferIntervalController;
 import com.hippo.ehviewer.reader.DownloadReadingNoticePolicy;
 import com.hippo.ehviewer.reader.DownloadReadingQueue;
+import com.hippo.ehviewer.reader.ReadingQueueManager;
 import com.hippo.ehviewer.spider.SpiderDen;
 import com.hippo.ehviewer.widget.GalleryGuideView;
 import com.hippo.ehviewer.widget.GalleryHeader;
@@ -140,6 +141,7 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
     public static final String KEY_START_AUTO_TRANSFER = "start_auto_transfer";
     private static final String KEY_DOWNLOAD_READING_PROVIDER_ERROR_SHOWN =
             "download_reading_provider_error_shown";
+    private static final String KEY_READING_QUEUE_RECORDED = "reading_queue_recorded";
 
     private static final String TAG = "GalleryActivity";
     private static final long SLIDER_ANIMATION_DURING = 150;
@@ -201,6 +203,7 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
     private boolean mStartAutoTransfer;
     private boolean mQueueAdvanceInProgress;
     private volatile boolean mQueueProviderErrorShown;
+    private volatile boolean mReadingQueueRecorded;
 
     private final ConcurrentPool<NotifyTask> mNotifyTaskPool = new ConcurrentPool<>(3);
 
@@ -340,6 +343,7 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
         mStartAutoTransfer = savedInstanceState.getBoolean(KEY_START_AUTO_TRANSFER, false);
         mQueueProviderErrorShown = savedInstanceState.getBoolean(
                 KEY_DOWNLOAD_READING_PROVIDER_ERROR_SHOWN, false);
+        mReadingQueueRecorded = savedInstanceState.getBoolean(KEY_READING_QUEUE_RECORDED, false);
         buildProvider();
     }
 
@@ -360,6 +364,7 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
         outState.putBoolean(KEY_START_AUTO_TRANSFER, autoTransferring || mStartAutoTransfer);
         outState.putBoolean(KEY_DOWNLOAD_READING_PROVIDER_ERROR_SHOWN,
                 mQueueProviderErrorShown);
+        outState.putBoolean(KEY_READING_QUEUE_RECORDED, mReadingQueueRecorded);
     }
 
     @Override
@@ -1621,6 +1626,20 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
                 task.setData(NotifyTask.KEY_SIZE, size);
                 SimpleHandler.getInstance().post(task);
             }
+        }
+
+        @Override
+        protected void onPageDisplayed(int index) {
+            if (mReadingQueueRecorded || mGalleryInfo == null) {
+                return;
+            }
+            DownloadInfo info = EhApplication.getDownloadManager(GalleryActivity.this)
+                    .getDownloadInfo(mGalleryInfo.gid);
+            if (!ReadingQueueManager.isEligible(info)) {
+                return;
+            }
+            mReadingQueueRecorded = true;
+            ReadingQueueManager.recordSuccessfulRead(GalleryActivity.this, info);
         }
     }
 

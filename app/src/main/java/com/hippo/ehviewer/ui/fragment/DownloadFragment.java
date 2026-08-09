@@ -24,11 +24,14 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
+import android.text.InputType;
 import android.widget.Toast;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
+import androidx.preference.EditTextPreference;
+import androidx.preference.TwoStatePreference;
 
 import com.hippo.ehviewer.EhApplication;
 import com.hippo.ehviewer.EhDB;
@@ -36,6 +39,10 @@ import com.hippo.ehviewer.R;
 import com.hippo.ehviewer.Settings;
 import com.hippo.ehviewer.client.data.GalleryInfo;
 import com.hippo.ehviewer.download.DownloadManager;
+import com.hippo.ehviewer.reader.ReadingQueueCleanupResult;
+import com.hippo.ehviewer.reader.ReadingQueueManager;
+import com.hippo.ehviewer.reader.ReadingQueuePolicy;
+import com.hippo.ehviewer.reader.ReadingQueueRepository;
 import com.hippo.ehviewer.ui.CommonOperations;
 import com.hippo.ehviewer.ui.DirPickerActivity;
 import com.hippo.unifile.UniFile;
@@ -84,6 +91,10 @@ public class DownloadFragment extends PreferenceFragmentCompat implements
         Preference cleanInvalidDownload = findPreference(KEY_CLEAN_INVALID_DOWNLOAD);
         Preference preloadImage = findPreference("preload_image");
         Preference imageResolutionPref = findPreference(Settings.KEY_IMAGE_RESOLUTION);
+        Preference readingQueueAutoDelete =
+                findPreference(Settings.KEY_READING_QUEUE_AUTO_DELETE);
+        EditTextPreference readingQueueCapacity =
+                findPreference(Settings.KEY_READING_QUEUE_CAPACITY);
 
         onUpdateDownloadLocation();
 
@@ -103,6 +114,19 @@ public class DownloadFragment extends PreferenceFragmentCompat implements
         }
         if(imageResolutionPref != null){
             imageResolutionPref.setSummary(getString(R.string.settings_download_image_resolution_summary, Settings.getImageResolution()));
+        }
+        if (readingQueueAutoDelete instanceof TwoStatePreference) {
+            ((TwoStatePreference) readingQueueAutoDelete).setChecked(
+                    Settings.getReadingQueueAutoDelete());
+            readingQueueAutoDelete.setOnPreferenceChangeListener(this);
+        }
+        if (readingQueueCapacity != null) {
+            readingQueueCapacity.setText(String.valueOf(Settings.getReadingQueueCapacity()));
+            updateReadingQueueCapacitySummary(readingQueueCapacity,
+                    Settings.getReadingQueueCapacity());
+            readingQueueCapacity.setOnBindEditTextListener(editText ->
+                    editText.setInputType(InputType.TYPE_CLASS_NUMBER));
+            readingQueueCapacity.setOnPreferenceChangeListener(this);
         }
 
 
@@ -337,8 +361,98 @@ public class DownloadFragment extends PreferenceFragmentCompat implements
                 Settings.setDownloadTimeout(toTimeoutTime(newValue));
             }
             return true;
+        } else if (Settings.KEY_READING_QUEUE_AUTO_DELETE.equals(key)) {
+            boolean enabled = newValue instanceof Boolean && (Boolean) newValue;
+            if (!enabled) {
+                Settings.putReadingQueueAutoDelete(false);
+                if (preference instanceof TwoStatePreference) {
+                    ((TwoStatePreference) preference).setChecked(false);
+                }
+                return false;
+            }
+            int overflow = ReadingQueuePolicy.overflowCount(
+                    ReadingQueueRepository.getInstance().getCount(),
+                    Settings.getReadingQueueCapacity());
+            Runnable enable = () -> {
+                Settings.putReadingQueueAutoDelete(true);
+                if (preference instanceof TwoStatePreference) {
+                    ((TwoStatePreference) preference).setChecked(true);
+                }
+                if (overflow > 0) {
+                    trimReadingQueue();
+                }
+            };
+            if (overflow > 0) {
+                showReadingQueueTrimConfirmation(overflow, enable);
+            } else {
+                enable.run();
+            }
+            return false;
+        } else if (Settings.KEY_READING_QUEUE_CAPACITY.equals(key)) {
+            int capacity;
+            try {
+                capacity = Integer.parseInt(String.valueOf(newValue).trim());
+            } catch (NumberFormatException e) {
+                showInvalidReadingQueueCapacity();
+                return false;
+            }
+            if (!ReadingQueuePolicy.isValidCapacity(capacity)) {
+                showInvalidReadingQueueCapacity();
+                return false;
+            }
+            Runnable save = () -> {
+                Settings.putReadingQueueCapacity(capacity);
+                if (preference instanceof EditTextPreference) {
+                    ((EditTextPreference) preference).setText(String.valueOf(capacity));
+                }
+                updateReadingQueueCapacitySummary(preference, capacity);
+                if (Settings.getReadingQueueAutoDelete()) {
+                    trimReadingQueue();
+                }
+            };
+            int overflow = Settings.getReadingQueueAutoDelete()
+                    ? ReadingQueuePolicy.overflowCount(
+                            ReadingQueueRepository.getInstance().getCount(), capacity)
+                    : 0;
+            if (overflow > 0) {
+                showReadingQueueTrimConfirmation(overflow, save);
+            } else {
+                save.run();
+            }
+            return false;
         }
         return false;
+    }
+
+    private void updateReadingQueueCapacitySummary(Preference preference, int capacity) {
+        preference.setSummary(getString(R.string.settings_reading_queue_capacity_value,
+                capacity));
+    }
+
+    private void showInvalidReadingQueueCapacity() {
+        Toast.makeText(requireContext(), R.string.settings_reading_queue_capacity_invalid,
+                Toast.LENGTH_LONG).show();
+    }
+
+    private void showReadingQueueTrimConfirmation(int overflow, Runnable confirm) {
+        new AlertDialog.Builder(requireContext())
+                .setTitle(R.string.settings_reading_queue_cleanup_title)
+                .setMessage(getString(R.string.settings_reading_queue_cleanup_message, overflow))
+                .setPositiveButton(android.R.string.ok, (dialog, which) -> confirm.run())
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void trimReadingQueue() {
+        ReadingQueueManager.trim(requireContext(), this::showReadingQueueCleanupResult);
+    }
+
+    private void showReadingQueueCleanupResult(ReadingQueueCleanupResult result) {
+        if (!isAdded()) {
+            return;
+        }
+        Toast.makeText(requireContext(), getString(R.string.reading_queue_cleanup_result,
+                result.deleted, result.failed), Toast.LENGTH_LONG).show();
     }
 
     private int toTimeoutTime(Object newValue) {
