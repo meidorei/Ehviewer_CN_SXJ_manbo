@@ -17,6 +17,12 @@
 <!-- 繁體中文 -->
 <resources>
 
+    <string name="home_boundary_marker">上次看到這裡</string>
+    <string name="home_boundary_reset_action">將首頁分隔線重設到最新位置</string>
+    <string name="home_boundary_reset_success">首頁分隔線已重設</string>
+    <string name="home_boundary_reset_unavailable">目前沒有可設定分隔線的首頁內容</string>
+    <string name="home_boundary_reset_failed">首頁分隔線重設失敗</string>
+
     <!--  black list (temporary)  -->
     <string name="blacklist_id">用戶ID</string>
     <string name="blacklist">黑名單</string>

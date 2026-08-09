@@ -2,7 +2,15 @@ package com.hippo.ehviewer.subscription;
 
 /** Namespaces sync and local-seen checkpoints without changing the existing table schema. */
 public final class FeedCheckpointKeys {
+    private static final String SHARED_ACCOUNT = "shared";
+    private static final String HOME_MANUAL_TYPE = "HOME_MANUAL";
+
     private FeedCheckpointKeys() {}
+
+    /** One manually controlled homepage marker shared by every account and site context. */
+    public static CheckpointKey homeManual() {
+        return new CheckpointKey(SHARED_ACCOUNT, HOME_MANUAL_TYPE, "home", "");
+    }
 
     public static CheckpointKey seen(String accountKey, FeedSourceContext context) {
         String type;

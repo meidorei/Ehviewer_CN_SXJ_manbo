@@ -131,6 +131,17 @@ public final class SubscriptionRepository {
         upsertCheckpoint(db, key, old.previous, boundary);
     }
 
+    public FeedBoundary readHomeManualBoundary() {
+        return readCheckpoint(FeedCheckpointKeys.homeManual()).current;
+    }
+
+    /** Replaces the device-wide homepage marker without creating an automatic history step. */
+    public void replaceHomeManualBoundary(FeedBoundary boundary) {
+        if (boundary == null || boundary.isEmpty()) return;
+        upsertCheckpoint(EhDB.getDatabase(), FeedCheckpointKeys.homeManual(),
+                FeedBoundary.EMPTY, boundary);
+    }
+
     private static void upsertCheckpoint(Database db, CheckpointKey key,
                                          FeedBoundary previous, FeedBoundary current) {
         db.execSQL("INSERT OR REPLACE INTO FEED_CHECKPOINT " +

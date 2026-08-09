@@ -242,6 +242,8 @@ public final class GalleryListScene extends BaseScene
     @Nullable
     private FloatingActionButton mFloatingActionButton;
     @Nullable
+    private FloatingActionButton mHomeBoundaryFab;
+    @Nullable
     private ViewTransition mViewTransition;
     @Nullable
     private GalleryListAdapter mAdapter;
@@ -391,6 +393,7 @@ public final class GalleryListScene extends BaseScene
                         LocalFollowRepository.SOURCE_FOLLOW, sourceKey) : 0;
         mVisibleFeedBoundary = FeedBoundary.EMPTY;
         clearVisibleFeedMarker();
+        updateHomeBoundaryAction();
         loadFeedBoundary();
     }
 
@@ -424,7 +427,9 @@ public final class GalleryListScene extends BaseScene
         repository.execute(() -> {
             FeedCheckpoint checkpoint;
             FeedBoundary boundary;
-            if (context.type == FeedSourceContext.Type.SUBSCRIPTION_AGGREGATE) {
+            if (context.type == FeedSourceContext.Type.HOME) {
+                boundary = repository.readHomeManualBoundary();
+            } else if (context.type == FeedSourceContext.Type.SUBSCRIPTION_AGGREGATE) {
                 checkpoint = repository.readCheckpoint(syncCheckpointKey(context));
                 boundary = checkpoint.previous;
             } else if (context.type == FeedSourceContext.Type.SUBSCRIPTION_TAG) {
@@ -440,9 +445,72 @@ public final class GalleryListScene extends BaseScene
             if (mFeedSourceContext != context) return;
             mVisibleFeedBoundary = boundary;
             if (mRecyclerView != null) mRecyclerView.post(() -> {
-                if (mFeedBoundaryDecoration != null) mFeedBoundaryDecoration.setBoundary(boundary);
+                if (mFeedBoundaryDecoration != null) {
+                    mFeedBoundaryDecoration.setLabel(getString(context.type == FeedSourceContext.Type.HOME
+                            ? R.string.home_boundary_marker : R.string.last_update_marker));
+                    mFeedBoundaryDecoration.setBoundary(boundary);
+                }
                 if (mRecyclerView != null) mRecyclerView.invalidateItemDecorations();
             });
+        });
+    }
+
+    private void updateHomeBoundaryAction() {
+        if (mHomeBoundaryFab == null) return;
+        boolean home = mFeedSourceContext != null
+                && mFeedSourceContext.type == FeedSourceContext.Type.HOME;
+        mHomeBoundaryFab.setVisibility(home
+                ? mFabLayout != null && mFabLayout.isExpanded() ? View.VISIBLE : View.INVISIBLE
+                : View.GONE);
+        if (mFeedBoundaryDecoration != null) {
+            mFeedBoundaryDecoration.setLabel(getString(home
+                    ? R.string.home_boundary_marker : R.string.last_update_marker));
+        }
+    }
+
+    private void resetHomeBoundary() {
+        FeedSourceContext context = mFeedSourceContext;
+        Context uiContext = getEHContext();
+        if (context == null || context.type != FeedSourceContext.Type.HOME
+                || uiContext == null || mHelper == null) return;
+        FeedBoundary boundary = LocalFollowRepository.boundaryOf(mHelper.getData());
+        if (boundary.isEmpty()) {
+            Toast.makeText(uiContext, R.string.home_boundary_reset_unavailable,
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        SubscriptionRepository repository = SubscriptionRepository.getInstance();
+        repository.execute(() -> {
+            try {
+                repository.replaceHomeManualBoundary(boundary);
+                MainActivity activity = getActivity2();
+                if (activity == null) return;
+                activity.runOnUiThread(() -> {
+                    if (mFeedSourceContext != context) return;
+                    mVisibleFeedBoundary = boundary;
+                    if (mFeedBoundaryDecoration != null) {
+                        mFeedBoundaryDecoration.setLabel(getString(R.string.home_boundary_marker));
+                        mFeedBoundaryDecoration.setBoundary(boundary);
+                    }
+                    if (mRecyclerView != null) mRecyclerView.invalidateItemDecorations();
+                    Context current = getEHContext();
+                    if (current != null) {
+                        Toast.makeText(current, R.string.home_boundary_reset_success,
+                                Toast.LENGTH_SHORT).show();
+                    }
+                });
+            } catch (RuntimeException e) {
+                Log.e(TAG, "Failed to save homepage boundary", e);
+                MainActivity activity = getActivity2();
+                if (activity == null) return;
+                activity.runOnUiThread(() -> {
+                    Context current = getEHContext();
+                    if (current != null) {
+                        Toast.makeText(current, R.string.home_boundary_reset_failed,
+                                Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
         });
     }
 
@@ -790,6 +858,7 @@ public final class GalleryListScene extends BaseScene
         mSearchBar = (SearchBar) ViewUtils.$$(mainLayout, R.id.search_bar);
         mFabLayout = (FabLayout) ViewUtils.$$(mainLayout, R.id.fab_layout);
         mFloatingActionButton = (FloatingActionButton) ViewUtils.$$(mFabLayout, R.id.tag_filter);
+        mHomeBoundaryFab = (FloatingActionButton) ViewUtils.$$(mFabLayout, R.id.home_boundary_reset);
 
         onFilter(filterOpen, filterTagList.size());
 
@@ -849,6 +918,7 @@ public final class GalleryListScene extends BaseScene
         mFabLayout.setHidePrimaryFab(false);
         mFabLayout.setOnClickFabListener(this);
         mFabLayout.setOnExpandListener(this);
+        updateHomeBoundaryAction();
         addAboveSnackView(mFabLayout);
 
         mActionFabDrawable = new AddDeleteDrawable(context, resources.getColor(R.color.primary_drawable_dark, null));
@@ -1098,6 +1168,7 @@ public final class GalleryListScene extends BaseScene
         mSearchLayout = null;
         mSearchBar = null;
         mSearchFab = null;
+        mHomeBoundaryFab = null;
         mViewTransition = null;
         mLeftDrawable = null;
         mRightDrawable = null;
@@ -1763,6 +1834,9 @@ public final class GalleryListScene extends BaseScene
                     return;
                 }
                 onItemClick(null, gInfoL.get((int) (Math.random() * gInfoL.size())));
+                break;
+            case 4: // Reset the manually controlled homepage marker
+                resetHomeBoundary();
                 break;
         }
 

@@ -376,6 +376,11 @@
     <string name="more_previews">More previews</string>
     <string name="refresh">Refresh</string>
     <string name="last_update_marker">Last update reached here</string>
+    <string name="home_boundary_marker">Last seen here</string>
+    <string name="home_boundary_reset_action">Move homepage marker to the latest loaded item</string>
+    <string name="home_boundary_reset_success">Homepage marker moved</string>
+    <string name="home_boundary_reset_unavailable">No valid homepage item to mark</string>
+    <string name="home_boundary_reset_failed">Unable to move homepage marker</string>
     <string name="subscription_refresh_cooldown">Follow update is cooling down. Please try again shortly.</string>
     <string name="subscription_refresh_last">Last %1$s</string>
     <string name="subscription_refresh_failed">Failed %1$s</string>

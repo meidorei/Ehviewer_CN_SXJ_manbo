@@ -17,7 +17,7 @@ public final class FeedBoundaryDecoration extends RecyclerView.ItemDecoration {
     private final ItemProvider provider;
     private final Paint linePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final String label;
+    private volatile String label;
     private final int height;
     private volatile FeedBoundary boundary = FeedBoundary.EMPTY;
 
@@ -48,6 +48,10 @@ public final class FeedBoundaryDecoration extends RecyclerView.ItemDecoration {
 
     public void setBoundary(FeedBoundary value) {
         boundary = value == null ? FeedBoundary.EMPTY : value;
+    }
+
+    public void setLabel(String value) {
+        label = value == null ? "" : value;
     }
 
     private boolean isMarker(int position) {

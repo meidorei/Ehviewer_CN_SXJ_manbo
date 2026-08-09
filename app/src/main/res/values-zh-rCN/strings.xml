@@ -16,6 +16,11 @@
 
 <resources>
     <string name="last_update_marker">上次更新到这</string>
+    <string name="home_boundary_marker">上次看到这里</string>
+    <string name="home_boundary_reset_action">将首页分割线重置到最新位置</string>
+    <string name="home_boundary_reset_success">首页分割线已重置</string>
+    <string name="home_boundary_reset_unavailable">当前没有可设置分割线的首页内容</string>
+    <string name="home_boundary_reset_failed">首页分割线重置失败</string>
     <string name="subscription_refresh_cooldown">追更刷新冷却中，请稍后再试</string>
     <string name="subscription_refresh_last">上次 %1$s</string>
     <string name="subscription_refresh_failed">失败 %1$s</string>
