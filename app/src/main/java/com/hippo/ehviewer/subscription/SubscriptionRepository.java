@@ -84,7 +84,11 @@ public final class SubscriptionRepository {
     }
 
     public FeedCheckpoint readCheckpoint(CheckpointKey key) {
-        try (Cursor cursor = EhDB.getDatabase().rawQuery(
+        return readCheckpoint(EhDB.getDatabase(), key);
+    }
+
+    FeedCheckpoint readCheckpoint(Database db, CheckpointKey key) {
+        try (Cursor cursor = db.rawQuery(
                 "SELECT PREVIOUS_TIME,\"CURRENT_TIME\",PREVIOUS_GIDS,CURRENT_GIDS,UPDATED_AT " +
                         "FROM FEED_CHECKPOINT WHERE ACCOUNT_KEY=? AND SOURCE_TYPE=? AND SOURCE_KEY=? AND QUERY_SIGNATURE=?",
                 args(key))) {
@@ -118,16 +122,24 @@ public final class SubscriptionRepository {
 
     public void advanceCheckpoint(CheckpointKey key, FeedBoundary boundary) {
         if (boundary == null || boundary.time == 0) return;
-        Database db = EhDB.getDatabase();
-        FeedCheckpoint old = readCheckpoint(key);
+        advanceCheckpoint(EhDB.getDatabase(), key, boundary);
+    }
+
+    void advanceCheckpoint(Database db, CheckpointKey key, FeedBoundary boundary) {
+        if (boundary == null || boundary.time == 0) return;
+        FeedCheckpoint old = readCheckpoint(db, key);
         upsertCheckpoint(db, key, old.current, boundary);
     }
 
     /** Refines an initial/provisional baseline without manufacturing a previous sync boundary. */
     public void establishCheckpoint(CheckpointKey key, FeedBoundary boundary) {
         if (boundary == null || boundary.time == 0) return;
-        Database db = EhDB.getDatabase();
-        FeedCheckpoint old = readCheckpoint(key);
+        establishCheckpoint(EhDB.getDatabase(), key, boundary);
+    }
+
+    void establishCheckpoint(Database db, CheckpointKey key, FeedBoundary boundary) {
+        if (boundary == null || boundary.time == 0) return;
+        FeedCheckpoint old = readCheckpoint(db, key);
         upsertCheckpoint(db, key, old.previous, boundary);
     }
 

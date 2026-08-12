@@ -28,6 +28,10 @@ public final class ReadingQueueManager {
         void onComplete(@NonNull ReadingQueueCleanupResult result);
     }
 
+    public interface SnapshotCallback {
+        void onComplete(@NonNull ReadingQueueSnapshot snapshot);
+    }
+
     private static final ExecutorService EXECUTOR = Executors.newSingleThreadExecutor(r -> {
         Thread thread = new Thread(r, "ReadingQueue");
         thread.setDaemon(true);
@@ -44,13 +48,14 @@ public final class ReadingQueueManager {
     }
 
     public static void recordSuccessfulRead(@NonNull Context context,
-            @NonNull DownloadInfo info) {
+            @NonNull DownloadInfo info, int currentPage, int totalPages) {
         Context appContext = context.getApplicationContext();
         long gid = info.gid;
         PENDING_READS.add(gid);
         EXECUTOR.execute(() -> {
             try {
-                ReadingQueueRepository.getInstance().markRead(gid);
+                ReadingQueueRepository.getInstance().markRead(
+                        gid, currentPage, totalPages);
             } finally {
                 PENDING_READS.remove(gid);
             }
@@ -62,12 +67,28 @@ public final class ReadingQueueManager {
         });
     }
 
+    /** Updates a member's last successfully displayed page without changing queue order. */
+    public static void updateProgress(long gid, int currentPage, int totalPages) {
+        EXECUTOR.execute(() -> ReadingQueueRepository.getInstance().updateProgress(
+                gid, currentPage, totalPages));
+    }
+
     public static void trim(@NonNull Context context, @Nullable Callback callback) {
         Context appContext = context.getApplicationContext();
         EXECUTOR.execute(() -> {
             ReadingQueueCleanupResult result = trimInternal(appContext,
                     Settings.getReadingQueueCapacity());
             postResult(callback, result);
+        });
+    }
+
+    /** Loads queue membership and progress after all prior queue writes complete. */
+    public static void loadSnapshot(@Nullable SnapshotCallback callback) {
+        EXECUTOR.execute(() -> {
+            ReadingQueueSnapshot snapshot = ReadingQueueRepository.getInstance().getSnapshot();
+            if (callback != null) {
+                SimpleHandler.getInstance().post(() -> callback.onComplete(snapshot));
+            }
         });
     }
 

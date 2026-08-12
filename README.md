@@ -16,7 +16,7 @@
 - **可调请求间隔**：高级设置可以把更新检查的搜索请求间隔设为 `1.0–10.0` 秒，默认并推荐 `3.2` 秒。
 - **自动拼接中文**：开启后，普通搜索、订阅搜索、标签搜索和上传者搜索会自动添加中文语言条件；已指定语言时不会重复添加。
 - **JM 号查询**：支持输入纯数字，查询漫画名称、封面、作者、标签和章节等资料。
-- **阅读队列**：成功打开应用内完整下载后自动加入最近阅读队列；可选择开启自动删除并设置保留 1–100 部，默认关闭自动删除、默认上限为 20 部。
+- **阅读队列**：成功打开应用内完整下载后自动加入最近阅读队列；下载页会直接读取队列表快照，用黄色“已观看 12/50”标签标记当前队列成员和最后成功显示的页码，不逐本读取进度文件；页面右上角可设置自动删除及保留 1–100 部，默认关闭自动删除、默认上限为 20 部，淘汰时会永久删除整部漫画的本地下载目录。
 
 # 下一步
 
@@ -54,8 +54,8 @@
 当前功能仅针对调试版构建和验证：
 
 - applicationId：`com.ehviewer.manbo.debug`
-- versionName：`2.0.2.20`
-- versionCode：`145`
+- versionName：`2.0.2.24`
+- versionCode：`149`
 - 正式版 versionCode 仍为 `112`
 
 Windows：
@@ -76,7 +76,7 @@ Linux：
 app/build/outputs/apk/appRelease/debug/app-appRelease-debug.apk
 ```
 
-当前 v145 APK 大小为 `32615512` 字节，SHA-256 为 `D2168625B3ABD68FDC9FCB1B120B6F10BA0BF536B859C8EBC4C9AC16D0586704`，`output-metadata.json` 确认变体为 `appReleaseDebug`。
+当前 v149 APK 为 `appReleaseDebug / com.ehviewer.manbo.debug / 2.0.2.24 / 149`，大小为 `34083905` 字节，SHA-256 为 `709BDB15E74B9A4B4F0C3B9BC52583E4AB8581FCF59FD6BA4DA09A5E05CC53B0`。
 
 ------
 

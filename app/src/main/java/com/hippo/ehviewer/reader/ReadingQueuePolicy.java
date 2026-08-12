@@ -16,6 +16,27 @@ public final class ReadingQueuePolicy {
         return capacity >= MIN_CAPACITY && capacity <= MAX_CAPACITY;
     }
 
+    public static Integer parseCapacity(String value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            int capacity = Integer.parseInt(value.trim());
+            return isValidCapacity(capacity) ? capacity : null;
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /** Returns the number requiring confirmation for a settings transition. */
+    public static int confirmationDeletionCount(boolean oldEnabled, int oldCapacity,
+            boolean newEnabled, int newCapacity, int queueSize) {
+        if (!newEnabled || (oldEnabled && newCapacity >= oldCapacity)) {
+            return 0;
+        }
+        return overflowCount(queueSize, newCapacity);
+    }
+
     public static int overflowCount(int size, int capacity) {
         if (!isValidCapacity(capacity)) {
             return 0;

@@ -529,6 +529,8 @@
     <string name="sort_download_list">Sort List</string>
     <string name="download_start_all">Start all</string>
     <string name="download_stop_all">Stop all</string>
+    <string name="download_watched">Watched</string>
+    <string name="download_watched_progress">Watched %1$d/%2$d</string>
     <string name="download_reset_reading_progress">Reset reading progress</string>
     <string name="download_search_gallery">Search gallery</string>
     <string name="download_search_hint">Input search key</string>
@@ -1256,12 +1258,11 @@
     <string name="reading_queue_delete_done">Local download deleted</string>
     <string name="reading_queue_auto_deleted">Automatically deleted %1$d old downloads</string>
     <string name="reading_queue_cleanup_result">Deleted %1$d downloads; %2$d could not be deleted</string>
-    <string name="settings_reading_queue_auto_delete">Automatically delete old reading-queue downloads</string>
-    <string name="settings_reading_queue_auto_delete_summary">Off by default. When enabled, the oldest fully downloaded galleries are deleted after the queue exceeds its limit.</string>
+    <string name="reading_queue_settings">Reading queue settings</string>
+    <string name="settings_reading_queue_auto_delete">Automatically delete old downloads</string>
     <string name="settings_reading_queue_capacity">Reading queue limit</string>
-    <string name="settings_reading_queue_capacity_summary">Keep 20 recently read downloads when automatic deletion is enabled</string>
-    <string name="settings_reading_queue_capacity_value">Keep %1$d recently read downloads when automatic deletion is enabled</string>
     <string name="settings_reading_queue_capacity_invalid">Enter a whole number from 1 to 100</string>
+    <string name="settings_reading_queue_file_warning">When automatic deletion is enabled, an old gallery’s entire local download folder will be permanently deleted and cannot be recovered.</string>
     <string name="settings_reading_queue_cleanup_title">Delete old downloads?</string>
-    <string name="settings_reading_queue_cleanup_message">This setting will delete the %1$d oldest downloads in the reading queue.</string>
+    <string name="settings_reading_queue_cleanup_message">This will permanently delete the entire local download folder for the %1$d oldest galleries. This cannot be undone.</string>
 </resources>

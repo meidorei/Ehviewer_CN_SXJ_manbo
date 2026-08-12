@@ -1630,16 +1630,23 @@ public class GalleryActivity extends EhActivity implements SeekBar.OnSeekBarChan
 
         @Override
         protected void onPageDisplayed(int index) {
-            if (mReadingQueueRecorded || mGalleryInfo == null) {
+            if (mGalleryInfo == null || mGalleryProvider == null) {
                 return;
             }
-            DownloadInfo info = EhApplication.getDownloadManager(GalleryActivity.this)
-                    .getDownloadInfo(mGalleryInfo.gid);
-            if (!ReadingQueueManager.isEligible(info)) {
-                return;
+            int currentPage = index + 1;
+            int totalPages = mGalleryProvider.size();
+            if (!mReadingQueueRecorded) {
+                DownloadInfo info = EhApplication.getDownloadManager(GalleryActivity.this)
+                        .getDownloadInfo(mGalleryInfo.gid);
+                if (!ReadingQueueManager.isEligible(info)) {
+                    return;
+                }
+                mReadingQueueRecorded = true;
+                ReadingQueueManager.recordSuccessfulRead(GalleryActivity.this, info,
+                        currentPage, totalPages);
+            } else {
+                ReadingQueueManager.updateProgress(mGalleryInfo.gid, currentPage, totalPages);
             }
-            mReadingQueueRecorded = true;
-            ReadingQueueManager.recordSuccessfulRead(GalleryActivity.this, info);
         }
     }
 

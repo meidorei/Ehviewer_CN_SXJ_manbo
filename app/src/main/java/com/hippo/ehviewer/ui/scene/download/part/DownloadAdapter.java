@@ -48,6 +48,7 @@ import com.hippo.ehviewer.download.DownloadManager;
 import com.hippo.ehviewer.download.DownloadService;
 import com.hippo.ehviewer.gallery.A7ZipArchive;
 import com.hippo.ehviewer.gallery.Pipe;
+import com.hippo.ehviewer.reader.ReadingQueueSnapshot;
 import com.hippo.ehviewer.spider.SpiderInfo;
 import com.hippo.ehviewer.ui.scene.TransitionNameFactory;
 import com.hippo.ehviewer.ui.scene.download.DownloadsScene;
@@ -103,6 +104,7 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.Downlo
         int listIndexInPage(int position);
         List<DownloadInfo> getList();
         Map<Long, SpiderInfo> getSpiderInfoMap();
+        ReadingQueueSnapshot.Progress getReadingQueueProgress(long gid);
         DownloadManager getDownloadManager();
         EasyRecyclerView getRecyclerView();
     }
@@ -172,6 +174,20 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.Downlo
         try {
             int pos = mCallback.positionInList(position);
             DownloadInfo info = list.get(pos);
+            boolean completeAppDownload = info.state == DownloadInfo.STATE_FINISH
+                    && (info.archiveUri == null || info.archiveUri.isEmpty());
+            ReadingQueueSnapshot.Progress readingProgress = completeAppDownload
+                    ? mCallback.getReadingQueueProgress(info.gid) : null;
+            if (readingProgress == null) {
+                holder.watched.setVisibility(View.GONE);
+            } else {
+                holder.watched.setVisibility(View.VISIBLE);
+                holder.watched.setText(readingProgress.isKnown()
+                        ? holder.itemView.getResources().getString(
+                                R.string.download_watched_progress,
+                                readingProgress.currentPage, readingProgress.totalPages)
+                        : holder.itemView.getResources().getString(R.string.download_watched));
+            }
 
             String title = EhUtils.getSuitableTitle(info);
             // Add special prefix for imported archives
@@ -314,6 +330,7 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.Downlo
         holder.uploader.setVisibility(View.GONE);
         holder.rating.setVisibility(View.GONE);
         holder.category.setVisibility(View.GONE);
+        holder.watched.setVisibility(View.GONE);
         holder.readProgress.setVisibility(View.GONE);
         holder.state.setVisibility(View.GONE);
         holder.progressBar.setVisibility(View.VISIBLE);
@@ -660,6 +677,7 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.Downlo
         public final TextView uploader;
         public final SimpleRatingView rating;
         public final TextView category;
+        public final TextView watched;
         public final TextView readProgress;
         public final View start;
         public final View stop;
@@ -676,6 +694,7 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.Downlo
             uploader = itemView.findViewById(R.id.uploader);
             rating = itemView.findViewById(R.id.rating);
             category = itemView.findViewById(R.id.category);
+            watched = itemView.findViewById(R.id.watched);
             readProgress = itemView.findViewById(R.id.read_progress);
             start = itemView.findViewById(R.id.start);
             stop = itemView.findViewById(R.id.stop);

@@ -19,7 +19,9 @@ public final class ReadingQueueRepository {
         return INSTANCE;
     }
 
-    public synchronized void markRead(long gid) {
+    public synchronized void markRead(long gid, int currentPage, int totalPages) {
+        ReadingQueueSnapshot.Progress progress =
+                ReadingQueueSnapshot.normalizeProgress(currentPage, totalPages);
         Database db = EhDB.getDatabase();
         db.beginTransaction();
         try {
@@ -35,12 +37,34 @@ public final class ReadingQueueRepository {
                     nextOrder = current + 1L;
                 }
             }
-            db.execSQL("INSERT OR REPLACE INTO READING_QUEUE(GID,QUEUE_ORDER) VALUES(?,?)",
-                    new Object[]{gid, nextOrder});
+            db.execSQL("INSERT OR REPLACE INTO READING_QUEUE(" +
+                            "GID,QUEUE_ORDER,CURRENT_PAGE,TOTAL_PAGES) VALUES(?,?,?,?)",
+                    new Object[]{gid, nextOrder, progress.currentPage, progress.totalPages});
             db.setTransactionSuccessful();
         } finally {
             db.endTransaction();
         }
+    }
+
+    public synchronized void updateProgress(long gid, int currentPage, int totalPages) {
+        ReadingQueueSnapshot.Progress progress =
+                ReadingQueueSnapshot.normalizeProgress(currentPage, totalPages);
+        EhDB.getDatabase().execSQL("UPDATE READING_QUEUE SET CURRENT_PAGE=?,TOTAL_PAGES=? " +
+                        "WHERE GID=?",
+                new Object[]{progress.currentPage, progress.totalPages, gid});
+    }
+
+    public synchronized ReadingQueueSnapshot getSnapshot() {
+        List<ReadingQueueSnapshot.Entry> entries = new ArrayList<>();
+        try (Cursor cursor = EhDB.getDatabase().rawQuery(
+                "SELECT GID,CURRENT_PAGE,TOTAL_PAGES FROM READING_QUEUE " +
+                        "ORDER BY QUEUE_ORDER DESC", null)) {
+            while (cursor.moveToNext()) {
+                entries.add(new ReadingQueueSnapshot.Entry(cursor.getLong(0),
+                        cursor.getInt(1), cursor.getInt(2)));
+            }
+        }
+        return ReadingQueueSnapshot.from(entries);
     }
 
     public synchronized List<Long> getNewestFirst() {

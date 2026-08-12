@@ -93,6 +93,8 @@ import com.hippo.ehviewer.download.DownloadManager;
 import com.hippo.ehviewer.download.DownloadService;
 import com.hippo.ehviewer.event.SomethingNeedRefresh;
 import com.hippo.ehviewer.reader.DownloadReadingQueue;
+import com.hippo.ehviewer.reader.ReadingQueueManager;
+import com.hippo.ehviewer.reader.ReadingQueueSnapshot;
 import com.hippo.ehviewer.spider.SpiderInfo;
 import com.hippo.ehviewer.sync.DownloadListInfosExecutor;
 import com.hippo.ehviewer.sync.DownloadSpiderInfoExecutor;
@@ -183,6 +185,7 @@ public class DownloadsScene extends ToolbarScene
     private MyPageChangeListener myPageChangeListener;
 
     private final Map<Long, SpiderInfo> mSpiderInfoMap = new HashMap<>();
+    private ReadingQueueSnapshot mReadingQueueSnapshot = ReadingQueueSnapshot.empty();
 
     /*---------------
      View life cycle
@@ -710,6 +713,23 @@ public class DownloadsScene extends ToolbarScene
         super.onViewCreated(view, savedInstanceState);
         updateTitle();
         setNavigationIcon(R.drawable.v_arrow_left_dark_x24);
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        refreshReadingQueueSnapshot();
+    }
+
+    @SuppressLint("NotifyDataSetChanged")
+    private void refreshReadingQueueSnapshot() {
+        ReadingQueueManager.loadSnapshot(snapshot -> {
+            if (mAdapter == null || snapshot.equals(mReadingQueueSnapshot)) {
+                return;
+            }
+            mReadingQueueSnapshot = snapshot;
+            mAdapter.notifyDataSetChanged();
+        });
     }
 
     @Override
@@ -1362,6 +1382,11 @@ public class DownloadsScene extends ToolbarScene
     @Override
     public Map<Long, SpiderInfo> getSpiderInfoMap() {
         return mSpiderInfoMap;
+    }
+
+    @Override
+    public ReadingQueueSnapshot.Progress getReadingQueueProgress(long gid) {
+        return mReadingQueueSnapshot.get(gid);
     }
 
     @Override

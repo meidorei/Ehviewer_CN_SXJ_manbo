@@ -88,7 +88,7 @@ public class EhDB {
 
     public static int MAX_HISTORY_COUNT = 100;
 
-    private static DaoSession sDaoSession;
+    private static volatile DaoSession sDaoSession;
 
     private static boolean sHasOldDB;
     private static boolean sNewDB;
@@ -189,14 +189,17 @@ public class EhDB {
                 SubscriptionSchema.upgradeToV11(db);
             case 11: // 11 to 12, durable local reading queue
                 ReadingQueueSchema.upgradeToV12(db);
+            case 12: // 12 to 13, reading progress stored with queue membership
+                ReadingQueueSchema.upgradeToV13(db);
         }
     }
 
-    public static synchronized org.greenrobot.greendao.database.Database getDatabase() {
-        if (sDaoSession == null) {
+    public static org.greenrobot.greendao.database.Database getDatabase() {
+        DaoSession session = sDaoSession;
+        if (session == null) {
             throw new IllegalStateException("EhDB is not initialized");
         }
-        return sDaoSession.getDatabase();
+        return session.getDatabase();
     }
 
     private static class OldDBHelper extends SQLiteOpenHelper {
@@ -1148,10 +1151,13 @@ public class EhDB {
     private static void copyReadingQueue(org.greenrobot.greendao.database.Database source,
                                          SQLiteDatabase target) {
         try (Cursor cursor = source.rawQuery(
-                "SELECT GID,QUEUE_ORDER FROM READING_QUEUE ORDER BY QUEUE_ORDER", null)) {
+                "SELECT GID,QUEUE_ORDER,CURRENT_PAGE,TOTAL_PAGES " +
+                        "FROM READING_QUEUE ORDER BY QUEUE_ORDER", null)) {
             while (cursor.moveToNext()) {
-                target.execSQL("INSERT OR REPLACE INTO READING_QUEUE(GID,QUEUE_ORDER) VALUES(?,?)",
-                        new Object[]{cursor.getLong(0), cursor.getLong(1)});
+                target.execSQL("INSERT OR REPLACE INTO READING_QUEUE(" +
+                                "GID,QUEUE_ORDER,CURRENT_PAGE,TOTAL_PAGES) VALUES(?,?,?,?)",
+                        new Object[]{cursor.getLong(0), cursor.getLong(1),
+                                cursor.getInt(2), cursor.getInt(3)});
             }
         }
     }
@@ -1189,11 +1195,12 @@ public class EhDB {
         if (!hasTable(source, ReadingQueueSchema.TABLE)) return;
         ReadingQueueRepository repository = ReadingQueueRepository.getInstance();
         try (Cursor cursor = source.rawQuery(
-                "SELECT GID FROM READING_QUEUE ORDER BY QUEUE_ORDER ASC", null)) {
+                "SELECT GID,CURRENT_PAGE,TOTAL_PAGES FROM READING_QUEUE " +
+                        "ORDER BY QUEUE_ORDER ASC", null)) {
             while (cursor.moveToNext()) {
                 long gid = cursor.getLong(0);
                 if (manager.containDownloadInfo(gid)) {
-                    repository.markRead(gid);
+                    repository.markRead(gid, cursor.getInt(1), cursor.getInt(2));
                 }
             }
         }

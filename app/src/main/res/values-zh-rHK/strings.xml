@@ -462,6 +462,8 @@
     <string name="sort_download_list">排序列表</string>
     <string name="download_start_all">全部開始</string>
     <string name="download_stop_all">全部停止</string>
+    <string name="download_watched">已觀看</string>
+    <string name="download_watched_progress">已觀看 %1$d/%2$d</string>
     <string name="download_reset_reading_progress">重設閱讀進度</string>
     <string name="download_search_gallery">搜尋畫廊</string>
     <string name="download_search_hint">輸入搜尋關鍵字</string>
@@ -1059,12 +1061,11 @@
     <string name="reading_queue_delete_done">已刪除本機下載</string>
     <string name="reading_queue_auto_deleted">已自動刪除 %1$d 個較早觀看的下載</string>
     <string name="reading_queue_cleanup_result">已刪除 %1$d 個下載，%2$d 個刪除失敗</string>
-    <string name="settings_reading_queue_auto_delete">自動刪除閱讀隊列中的舊下載</string>
-    <string name="settings_reading_queue_auto_delete_summary">預設關閉；開啟後，隊列超過上限時會刪除最早觀看的完整下載</string>
+    <string name="reading_queue_settings">閱讀隊列設定</string>
+    <string name="settings_reading_queue_auto_delete">自動刪除舊下載</string>
     <string name="settings_reading_queue_capacity">閱讀隊列上限</string>
-    <string name="settings_reading_queue_capacity_summary">自動刪除開啟時保留最近觀看的 20 個下載</string>
-    <string name="settings_reading_queue_capacity_value">自動刪除開啟時保留最近觀看的 %1$d 個下載</string>
     <string name="settings_reading_queue_capacity_invalid">請輸入 1 至 100 的整數</string>
+    <string name="settings_reading_queue_file_warning">開啟自動刪除後，會永久刪除舊漫畫的整個本機下載目錄，檔案無法復原。</string>
     <string name="settings_reading_queue_cleanup_title">刪除舊下載？</string>
-    <string name="settings_reading_queue_cleanup_message">此設定將刪除閱讀隊列中最早觀看的 %1$d 個下載。</string>
+    <string name="settings_reading_queue_cleanup_message">將永久刪除閱讀隊列中最早觀看的 %1$d 部漫畫的整個本機下載目錄，此操作無法復原。</string>
 </resources>

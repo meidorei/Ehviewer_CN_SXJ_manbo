@@ -8,14 +8,17 @@ import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.LayoutInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.widget.SwitchCompat;
 import androidx.core.view.ViewCompat;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.StaggeredGridLayoutManager;
@@ -33,6 +36,7 @@ import com.hippo.ehviewer.client.EhUtils;
 import com.hippo.ehviewer.dao.DownloadInfo;
 import com.hippo.ehviewer.download.DownloadManager;
 import com.hippo.ehviewer.reader.ReadingQueueManager;
+import com.hippo.ehviewer.reader.ReadingQueuePolicy;
 import com.hippo.ehviewer.reader.ReadingQueueRepository;
 import com.hippo.ehviewer.ui.DownloadGalleryActivity;
 import com.hippo.ehviewer.ui.GalleryActivity;
@@ -46,6 +50,7 @@ import com.hippo.widget.LoadImageView;
 import com.hippo.widget.recyclerview.AutoStaggeredGridLayoutManager;
 import com.hippo.lib.yorozuya.AssertUtils;
 import com.hippo.lib.yorozuya.ViewUtils;
+import com.google.android.material.textfield.TextInputLayout;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -63,6 +68,20 @@ public class ReadingQueueScene extends ToolbarScene implements
     @Override
     public int getNavCheckedItem() {
         return R.id.nav_reading_queue;
+    }
+
+    @Override
+    public int getMenuResId() {
+        return R.menu.scene_reading_queue;
+    }
+
+    @Override
+    public boolean onMenuItemClick(MenuItem item) {
+        if (item.getItemId() == R.id.action_settings) {
+            showQueueSettings();
+            return true;
+        }
+        return false;
     }
 
     @Nullable
@@ -152,6 +171,79 @@ public class ReadingQueueScene extends ToolbarScene implements
     @Override
     public void onNavigationClick(View view) {
         onBackPressed();
+    }
+
+    private void showQueueSettings() {
+        View view = LayoutInflater.from(requireContext()).inflate(
+                R.layout.dialog_reading_queue_settings, null);
+        SwitchCompat autoDelete = view.findViewById(R.id.auto_delete);
+        TextInputLayout capacityLayout = view.findViewById(R.id.capacity_layout);
+        EditText capacityInput = view.findViewById(R.id.capacity);
+        boolean oldEnabled = Settings.getReadingQueueAutoDelete();
+        int oldCapacity = Settings.getReadingQueueCapacity();
+        autoDelete.setChecked(oldEnabled);
+        capacityInput.setText(String.valueOf(oldCapacity));
+        capacityInput.setSelection(capacityInput.length());
+
+        AlertDialog dialog = new AlertDialog.Builder(requireContext())
+                .setTitle(R.string.reading_queue_settings)
+                .setView(view)
+                .setPositiveButton(android.R.string.ok, null)
+                .setNegativeButton(android.R.string.cancel, null)
+                .create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                .setOnClickListener(button -> {
+                    Integer newCapacity = ReadingQueuePolicy.parseCapacity(
+                            capacityInput.getText() == null
+                                    ? null : capacityInput.getText().toString());
+                    if (newCapacity == null) {
+                        capacityLayout.setError(getString(
+                                R.string.settings_reading_queue_capacity_invalid));
+                        capacityInput.requestFocus();
+                        return;
+                    }
+                    capacityLayout.setError(null);
+                    boolean newEnabled = autoDelete.isChecked();
+                    int pendingDeletionCount =
+                            ReadingQueuePolicy.confirmationDeletionCount(
+                                    oldEnabled, oldCapacity, newEnabled, newCapacity,
+                                    ReadingQueueRepository.getInstance().getCount());
+                    dialog.dismiss();
+                    if (pendingDeletionCount > 0) {
+                        confirmQueueSettings(newEnabled, newCapacity,
+                                pendingDeletionCount);
+                    } else {
+                        saveQueueSettings(newEnabled, newCapacity);
+                    }
+                }));
+        dialog.show();
+    }
+
+    private void confirmQueueSettings(boolean enabled, int capacity, int deletionCount) {
+        new AlertDialog.Builder(requireContext())
+                .setTitle(R.string.settings_reading_queue_cleanup_title)
+                .setMessage(getString(R.string.settings_reading_queue_cleanup_message,
+                        deletionCount))
+                .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                    saveQueueSettings(enabled, capacity);
+                    ReadingQueueManager.trim(requireContext(), result -> {
+                        Context context = getEHContext();
+                        if (context == null) {
+                            return;
+                        }
+                        Toast.makeText(context, context.getString(
+                                R.string.reading_queue_cleanup_result,
+                                result.deleted, result.failed), Toast.LENGTH_LONG).show();
+                        reloadQueue();
+                    });
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void saveQueueSettings(boolean enabled, int capacity) {
+        Settings.putReadingQueueAutoDelete(enabled);
+        Settings.putReadingQueueCapacity(capacity);
     }
 
     private void reloadQueue() {

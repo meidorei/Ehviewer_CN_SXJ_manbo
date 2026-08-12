@@ -13,14 +13,25 @@ final class BookmarkUnreadClearPolicy {
     static FeedBoundary boundaryToAdvance(
             String openedSourceKey, String affectedSourceKey, int previousCount,
             int remainingCount, TagUpdateState.State countState,
-            FeedBoundary synchronizedTop) {
+            FeedBoundary currentOpen, FeedBoundary synchronizedTop) {
         if (openedSourceKey == null || openedSourceKey.equals(affectedSourceKey)
                 || previousCount <= 0 || remainingCount != 0
                 || countState != TagUpdateState.State.EXACT
                 || synchronizedTop == null || synchronizedTop.isEmpty()) {
             return FeedBoundary.EMPTY;
         }
-        return synchronizedTop;
+        if (currentOpen == null || currentOpen.isEmpty()
+                || currentOpen.time < synchronizedTop.time) {
+            return synchronizedTop;
+        }
+        if (currentOpen.time > synchronizedTop.time) {
+            return FeedBoundary.EMPTY;
+        }
+        Set<Long> mergedGids = new java.util.LinkedHashSet<>(currentOpen.gids);
+        if (!mergedGids.addAll(synchronizedTop.gids)) {
+            return FeedBoundary.EMPTY;
+        }
+        return new FeedBoundary(currentOpen.time, mergedGids);
     }
 
     static Map<String, Integer> remainingCounts(
