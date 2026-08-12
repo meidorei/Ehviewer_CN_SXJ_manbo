@@ -5,12 +5,15 @@ import android.database.Cursor;
 import com.hippo.ehviewer.EhDB;
 
 import org.greenrobot.greendao.database.Database;
+import org.greenrobot.greendao.database.DatabaseStatement;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import com.hippo.ehviewer.client.data.GalleryInfo;
 import com.hippo.ehviewer.dao.QuickSearch;
@@ -24,6 +27,10 @@ public final class LocalFollowRepository {
     public static final String CHECKPOINT_FOLLOW_OPEN = "LOCAL_FOLLOW_OPEN";
     public static final String CHECKPOINT_BOOKMARK_OPEN = "BOOKMARK_OPEN";
     private static final String SHARED_OPEN_ACCOUNT = "shared";
+    static final String READ_BOOKMARK_SYNC_BOUNDARY_SQL =
+            "SELECT \"CURRENT_TIME\",CURRENT_GIDS FROM FEED_CHECKPOINT " +
+                    "WHERE SOURCE_TYPE=? AND SOURCE_KEY=? AND QUERY_SIGNATURE=? " +
+                    "AND \"CURRENT_TIME\">0 ORDER BY UPDATED_AT DESC LIMIT 1";
     public static final String FIXED_CHINESE_SIGNATURE =
             QuerySignatureFactory.create("language:chinese$", true);
     private static final LocalFollowRepository INSTANCE = new LocalFollowRepository();
@@ -186,7 +193,11 @@ public final class LocalFollowRepository {
     }
 
     public TagUpdateState readState(String sourceType, String sourceKey, String signature) {
-        try (Cursor cursor = EhDB.getDatabase().rawQuery(
+        return readState(EhDB.getDatabase(), sourceType, sourceKey, signature);
+    }
+
+    TagUpdateState readState(Database db, String sourceType, String sourceKey, String signature) {
+        try (Cursor cursor = db.rawQuery(
                 "SELECT COUNT,COUNT_STATE,CHECKED_AT FROM LOCAL_UPDATE_STATE " +
                         "WHERE SOURCE_TYPE=? AND SOURCE_KEY=? AND QUERY_SIGNATURE=?",
                 new String[]{sourceType, sourceKey, signature})) {
@@ -209,20 +220,26 @@ public final class LocalFollowRepository {
 
     public void writeState(String sourceType, String sourceKey, String signature,
                            int count, TagUpdateState.State state, String error) {
-        writeStateAt(sourceType, sourceKey, signature, count, state, error,
+        writeState(EhDB.getDatabase(), sourceType, sourceKey, signature, count, state, error);
+    }
+
+    void writeState(Database db, String sourceType, String sourceKey, String signature,
+                    int count, TagUpdateState.State state, String error) {
+        writeStateAt(db, sourceType, sourceKey, signature, count, state, error,
                 System.currentTimeMillis());
     }
 
     public void writeProvisionalState(String sourceType, String sourceKey, String signature,
                                       long addedAt) {
-        writeStateAt(sourceType, sourceKey, signature, 0, TagUpdateState.State.EXACT, "",
+        writeStateAt(EhDB.getDatabase(), sourceType, sourceKey, signature,
+                0, TagUpdateState.State.EXACT, "",
                 addedAt);
     }
 
-    private void writeStateAt(String sourceType, String sourceKey, String signature,
+    private void writeStateAt(Database db, String sourceType, String sourceKey, String signature,
                               int count, TagUpdateState.State state, String error,
                               long checkedAt) {
-        EhDB.getDatabase().execSQL(
+        db.execSQL(
                 "INSERT OR REPLACE INTO LOCAL_UPDATE_STATE " +
                         "(SOURCE_TYPE,SOURCE_KEY,QUERY_SIGNATURE,COUNT,COUNT_STATE,CHECKED_AT,ERROR) " +
                         "VALUES(?,?,?,?,?,?,?)",
@@ -282,18 +299,69 @@ public final class LocalFollowRepository {
      */
     public void completeSuccessfulOpen(String sourceType, String sourceKey, String signature,
                                        FeedBoundary pageTop, long unreadSnapshotRowId) {
-        if (pageTop == null || pageTop.isEmpty()) return;
+        boolean hasPageTop = pageTop != null && !pageTop.isEmpty();
+        if (!hasPageTop && !SOURCE_BOOKMARK.equals(sourceType)) return;
         String checkpointType = SOURCE_FOLLOW.equals(sourceType)
                 ? CHECKPOINT_FOLLOW_OPEN : CHECKPOINT_BOOKMARK_OPEN;
         Database db = EhDB.getDatabase();
         db.beginTransaction();
         try {
-            SubscriptionRepository.getInstance().advanceCheckpoint(
-                    new CheckpointKey(SHARED_OPEN_ACCOUNT, checkpointType,
-                            sourceKey, signature), pageTop);
-            db.execSQL("DELETE FROM LOCAL_UNREAD_GALLERY WHERE SOURCE_TYPE=? AND SOURCE_KEY=? " +
-                            "AND rowid<=?",
-                    new Object[]{sourceType, sourceKey, unreadSnapshotRowId});
+            if (hasPageTop) {
+                SubscriptionRepository.getInstance().advanceCheckpoint(
+                        new CheckpointKey(SHARED_OPEN_ACCOUNT, checkpointType,
+                                sourceKey, signature), pageTop);
+            }
+            if (SOURCE_BOOKMARK.equals(sourceType)) {
+                Set<Long> openedGids = readUnreadSnapshotGids(
+                        db, sourceType, sourceKey, unreadSnapshotRowId);
+                Map<String, Set<Long>> unreadByBookmark = readBookmarkUnreadGids(db);
+                Map<String, Integer> remainingByBookmark =
+                        BookmarkUnreadClearPolicy.remainingCounts(
+                                sourceType, openedGids, unreadByBookmark);
+                for (Long gid : openedGids) {
+                    db.execSQL("DELETE FROM LOCAL_UNREAD_GALLERY " +
+                                    "WHERE SOURCE_TYPE=? AND GID=?",
+                            new Object[]{SOURCE_BOOKMARK, gid});
+                }
+                for (Map.Entry<String, Integer> entry : remainingByBookmark.entrySet()) {
+                    if (sourceKey.equals(entry.getKey())) continue;
+                    BookmarkUpdateRow affectedState = readBookmarkUpdateRow(
+                            db, entry.getKey());
+                    FeedBoundary synchronizedTop = affectedState == null
+                            ? FeedBoundary.EMPTY
+                            : readLatestBookmarkSyncBoundary(
+                                    db, entry.getKey(), affectedState.signature);
+                    CheckpointKey openKey = affectedState == null ? null
+                            : new CheckpointKey(SHARED_OPEN_ACCOUNT,
+                                    CHECKPOINT_BOOKMARK_OPEN, entry.getKey(),
+                                    affectedState.signature);
+                    FeedBoundary currentOpen = openKey == null
+                            ? FeedBoundary.EMPTY
+                            : SubscriptionRepository.getInstance()
+                                    .readCheckpoint(db, openKey).current;
+                    FeedBoundary boundaryToAdvance =
+                            BookmarkUnreadClearPolicy.boundaryToAdvance(
+                                    sourceKey, entry.getKey(),
+                                    affectedState == null ? 0 : affectedState.count,
+                                    entry.getValue(), affectedState == null
+                                            ? TagUpdateState.State.UNKNOWN
+                                            : affectedState.state,
+                                    currentOpen, synchronizedTop);
+                    // Preserve the other bookmark's state, error and checked time. In
+                    // particular, a lower-bound state must remain 20+ after shared clearing.
+                    db.execSQL("UPDATE LOCAL_UPDATE_STATE SET COUNT=? " +
+                                    "WHERE SOURCE_TYPE=? AND SOURCE_KEY=?",
+                            new Object[]{entry.getValue(), SOURCE_BOOKMARK, entry.getKey()});
+                    if (!boundaryToAdvance.isEmpty()) {
+                        SubscriptionRepository.getInstance().advanceCheckpoint(
+                                db, openKey, boundaryToAdvance);
+                    }
+                }
+            } else {
+                db.execSQL("DELETE FROM LOCAL_UNREAD_GALLERY " +
+                                "WHERE SOURCE_TYPE=? AND SOURCE_KEY=? AND rowid<=?",
+                        new Object[]{sourceType, sourceKey, unreadSnapshotRowId});
+            }
             int remaining = unreadCount(db, sourceType, sourceKey);
             db.execSQL("UPDATE LOCAL_UPDATE_STATE SET COUNT=?,COUNT_STATE='EXACT',ERROR='',CHECKED_AT=? " +
                             "WHERE SOURCE_TYPE=? AND SOURCE_KEY=?",
@@ -304,11 +372,72 @@ public final class LocalFollowRepository {
         }
     }
 
+    private static Set<Long> readUnreadSnapshotGids(
+            Database db, String sourceType, String sourceKey, long snapshotRowId) {
+        Set<Long> result = new LinkedHashSet<>();
+        try (Cursor cursor = db.rawQuery(
+                "SELECT GID FROM LOCAL_UNREAD_GALLERY " +
+                        "WHERE SOURCE_TYPE=? AND SOURCE_KEY=? AND rowid<=?",
+                new String[]{sourceType, sourceKey, Long.toString(snapshotRowId)})) {
+            while (cursor.moveToNext()) result.add(cursor.getLong(0));
+        }
+        return result;
+    }
+
+    private static Map<String, Set<Long>> readBookmarkUnreadGids(Database db) {
+        Map<String, Set<Long>> result = new LinkedHashMap<>();
+        try (Cursor cursor = db.rawQuery(
+                "SELECT SOURCE_KEY,GID FROM LOCAL_UNREAD_GALLERY WHERE SOURCE_TYPE=?",
+                new String[]{SOURCE_BOOKMARK})) {
+            while (cursor.moveToNext()) {
+                result.computeIfAbsent(cursor.getString(0), ignored -> new LinkedHashSet<>())
+                        .add(cursor.getLong(1));
+            }
+        }
+        return result;
+    }
+
+    private static BookmarkUpdateRow readBookmarkUpdateRow(
+            Database db, String sourceKey) {
+        try (Cursor cursor = db.rawQuery(
+                "SELECT QUERY_SIGNATURE,COUNT,COUNT_STATE FROM LOCAL_UPDATE_STATE " +
+                        "WHERE SOURCE_TYPE=? AND SOURCE_KEY=? " +
+                        "ORDER BY CHECKED_AT DESC LIMIT 1",
+                new String[]{SOURCE_BOOKMARK, sourceKey})) {
+            if (!cursor.moveToFirst()) return null;
+            return new BookmarkUpdateRow(cursor.getString(0), cursor.getInt(1),
+                    TagUpdateState.State.valueOf(cursor.getString(2)));
+        }
+    }
+
+    private static FeedBoundary readLatestBookmarkSyncBoundary(
+            Database db, String sourceKey, String signature) {
+        try (Cursor cursor = db.rawQuery(
+                READ_BOOKMARK_SYNC_BOUNDARY_SQL,
+                new String[]{CHECKPOINT_BOOKMARK, sourceKey, signature})) {
+            if (!cursor.moveToFirst()) return FeedBoundary.EMPTY;
+            return new FeedBoundary(cursor.getLong(0),
+                    SubscriptionRepository.parseGids(cursor.getString(1)));
+        }
+    }
+
     private static int unreadCount(Database db, String sourceType, String sourceKey) {
         try (Cursor cursor = db.rawQuery(
                 "SELECT COUNT(*) FROM LOCAL_UNREAD_GALLERY WHERE SOURCE_TYPE=? AND SOURCE_KEY=?",
                 new String[]{sourceType, sourceKey})) {
             return cursor.moveToFirst() ? cursor.getInt(0) : 0;
+        }
+    }
+
+    private static final class BookmarkUpdateRow {
+        final String signature;
+        final int count;
+        final TagUpdateState.State state;
+
+        BookmarkUpdateRow(String signature, int count, TagUpdateState.State state) {
+            this.signature = signature;
+            this.count = count;
+            this.state = state;
         }
     }
 
@@ -422,6 +551,21 @@ public final class LocalFollowRepository {
                 false, true);
     }
 
+    TagUpdateState commitBookmarkScan(
+            String sourceKey, String signature, CheckpointKey checkpointKey,
+            FeedBoundary synchronizedTop, BookmarkScanResult scan) {
+        if (scan == null) throw new IllegalArgumentException("null bookmark scan");
+        if (scan.top.isEmpty()
+                && (synchronizedTop == null || synchronizedTop.isEmpty())) {
+            markCheckedWithoutChanges(SOURCE_BOOKMARK, sourceKey, signature);
+            return readState(SOURCE_BOOKMARK, sourceKey, signature);
+        }
+        FeedBoundary commitTop = synchronizedTop == null || synchronizedTop.isEmpty()
+                ? scan.top : synchronizedTop;
+        return commitPreparedGids(SOURCE_BOOKMARK, sourceKey, signature, checkpointKey,
+                commitTop, scan.newGids, false, scan.boundaryProven);
+    }
+
     private TagUpdateState commitPrepared(
             String sourceType, String sourceKey, String signature,
             CheckpointKey checkpointKey, FeedBoundary newest,
@@ -432,36 +576,66 @@ public final class LocalFollowRepository {
         boolean reached = baseline || boundaryProven;
         List<Long> newGids = new ArrayList<>();
         if (!baseline) {
+            newGids.addAll(collectNewGids(old.current, matchingGalleries));
             for (GalleryInfo gallery : matchingGalleries) {
                 if (gallery.postedTimestamp <= 0) {
                     throw new IllegalArgumentException("gallery timestamp unavailable");
                 }
-                if (old.current.isFirstOld(gallery.postedTimestamp, gallery.gid)) {
+                if (gallery.postedTimestamp < old.current.time) {
                     reached = true;
                     break;
-                }
-                if (old.current.isNew(gallery.postedTimestamp, gallery.gid)) {
-                    newGids.add(gallery.gid);
                 }
             }
         }
         boolean capped = !baseline && (forceCapped || !reached);
+        return commitDelta(sourceType, sourceKey, signature, checkpointKey,
+                newest, newGids, baseline, capped);
+    }
+
+    private TagUpdateState commitPreparedGids(
+            String sourceType, String sourceKey, String signature,
+            CheckpointKey checkpointKey, FeedBoundary newest,
+            Collection<Long> newGids, boolean forceCapped,
+            boolean boundaryProven) {
+        FeedCheckpoint old = SubscriptionRepository.getInstance().readCheckpoint(checkpointKey);
+        boolean baseline = old.current.isEmpty();
+        boolean capped = !baseline && (forceCapped || !boundaryProven);
+        return commitDelta(sourceType, sourceKey, signature, checkpointKey,
+                newest, newGids, baseline, capped);
+    }
+
+    private TagUpdateState commitDelta(
+            String sourceType, String sourceKey, String signature,
+            CheckpointKey checkpointKey, FeedBoundary newest,
+            Collection<Long> newGids, boolean baseline, boolean capped) {
         Database db = EhDB.getDatabase();
+        DatabaseStatement insert = null;
         db.beginTransaction();
         try {
-            SubscriptionRepository.getInstance().advanceCheckpoint(checkpointKey, newest);
-            if (!baseline) {
+            SubscriptionRepository.getInstance().advanceCheckpoint(db, checkpointKey, newest);
+            if (!baseline && newGids != null && !newGids.isEmpty()) {
+                insert = db.compileStatement("INSERT OR IGNORE INTO LOCAL_UNREAD_GALLERY" +
+                        "(SOURCE_TYPE,SOURCE_KEY,GID,DETECTED_AT) VALUES(?,?,?,?)");
+                long detectedAt = System.currentTimeMillis();
                 for (Long gid : newGids) {
-                    db.execSQL("INSERT OR IGNORE INTO LOCAL_UNREAD_GALLERY" +
-                                    "(SOURCE_TYPE,SOURCE_KEY,GID,DETECTED_AT) VALUES(?,?,?,?)",
-                            new Object[]{sourceType, sourceKey, gid,
-                                    System.currentTimeMillis()});
+                    if (gid == null) continue;
+                    insert.clearBindings();
+                    insert.bindString(1, sourceType);
+                    insert.bindString(2, sourceKey);
+                    insert.bindLong(3, gid);
+                    insert.bindLong(4, detectedAt);
+                    insert.executeInsert();
                 }
-                db.execSQL("DELETE FROM LOCAL_UNREAD_GALLERY WHERE SOURCE_TYPE=? AND SOURCE_KEY=? " +
-                                "AND GID NOT IN (SELECT GID FROM LOCAL_UNREAD_GALLERY " +
-                                "WHERE SOURCE_TYPE=? AND SOURCE_KEY=? " +
-                                "ORDER BY DETECTED_AT DESC,GID DESC LIMIT 21)",
-                        new Object[]{sourceType, sourceKey, sourceType, sourceKey});
+            }
+            if (!baseline) {
+                if (UnreadRetentionPolicy.maxRows(sourceType)
+                        == UnreadRetentionPolicy.LOCAL_FOLLOW_LIMIT) {
+                    db.execSQL("DELETE FROM LOCAL_UNREAD_GALLERY WHERE SOURCE_TYPE=? AND SOURCE_KEY=? " +
+                                    "AND GID NOT IN (SELECT GID FROM LOCAL_UNREAD_GALLERY " +
+                                    "WHERE SOURCE_TYPE=? AND SOURCE_KEY=? " +
+                                    "ORDER BY DETECTED_AT DESC,GID DESC LIMIT 21)",
+                            new Object[]{sourceType, sourceKey, sourceType, sourceKey});
+                }
             }
             int count = 0;
             try (Cursor cursor = db.rawQuery(
@@ -469,19 +643,42 @@ public final class LocalFollowRepository {
                     new String[]{sourceType, sourceKey})) {
                 if (cursor.moveToFirst()) count = cursor.getInt(0);
             }
-            TagUpdateState current = readState(sourceType, sourceKey, signature);
+            TagUpdateState current = readState(db, sourceType, sourceKey, signature);
             capped = capped || current.state == TagUpdateState.State.LOWER_BOUND
                     || count > TagUpdateState.DISPLAY_CAP;
-            writeState(sourceType, sourceKey, signature,
+            writeState(db, sourceType, sourceKey, signature,
                     baseline ? current.count : count,
                     capped ? TagUpdateState.State.LOWER_BOUND : TagUpdateState.State.EXACT, "");
             db.execSQL("UPDATE LOCAL_FOLLOW_TAG SET LAST_CHECKED_AT=? WHERE TAG_NAME=?",
                     new Object[]{System.currentTimeMillis(), sourceKey});
             db.setTransactionSuccessful();
         } finally {
-            db.endTransaction();
+            try {
+                if (insert != null) insert.close();
+            } finally {
+                db.endTransaction();
+            }
         }
         return readState(sourceType, sourceKey, signature);
+    }
+
+    static List<Long> collectNewGids(FeedBoundary oldBoundary,
+                                     List<GalleryInfo> galleries) {
+        if (oldBoundary == null || oldBoundary.isEmpty()
+                || galleries == null || galleries.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Set<Long> result = new LinkedHashSet<>();
+        for (GalleryInfo gallery : galleries) {
+            if (gallery == null || gallery.postedTimestamp <= 0) {
+                throw new IllegalArgumentException("gallery timestamp unavailable");
+            }
+            if (gallery.postedTimestamp < oldBoundary.time) break;
+            if (oldBoundary.isNew(gallery.postedTimestamp, gallery.gid)) {
+                result.add(gallery.gid);
+            }
+        }
+        return Collections.unmodifiableList(new ArrayList<>(result));
     }
 
     public void establishBaseline(String sourceType, String sourceKey, String signature,
@@ -490,10 +687,10 @@ public final class LocalFollowRepository {
         Database db = EhDB.getDatabase();
         db.beginTransaction();
         try {
-            SubscriptionRepository.getInstance().establishCheckpoint(checkpointKey, boundary);
-            TagUpdateState current = readState(sourceType, sourceKey, signature);
+            SubscriptionRepository.getInstance().establishCheckpoint(db, checkpointKey, boundary);
+            TagUpdateState current = readState(db, sourceType, sourceKey, signature);
             if (current.checkedAt == 0) {
-                writeState(sourceType, sourceKey, signature, 0,
+                writeState(db, sourceType, sourceKey, signature, 0,
                         TagUpdateState.State.EXACT, "");
             }
             db.setTransactionSuccessful();
@@ -514,8 +711,9 @@ public final class LocalFollowRepository {
     }
 
     public void markError(String sourceType, String sourceKey, String signature, String error) {
-        TagUpdateState current = readState(sourceType, sourceKey, signature);
-        writeStateAt(sourceType, sourceKey, signature, current.count, current.state, error,
+        Database db = EhDB.getDatabase();
+        TagUpdateState current = readState(db, sourceType, sourceKey, signature);
+        writeStateAt(db, sourceType, sourceKey, signature, current.count, current.state, error,
                 current.checkedAt == 0 ? System.currentTimeMillis() : current.checkedAt);
     }
 

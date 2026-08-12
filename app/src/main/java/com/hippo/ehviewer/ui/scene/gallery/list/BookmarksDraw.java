@@ -31,6 +31,7 @@ import com.hippo.ehviewer.subscription.QuerySignatureFactory;
 import com.hippo.ehviewer.subscription.SearchQueryPolicy;
 import com.hippo.ehviewer.subscription.SubscriptionRepository;
 import com.hippo.ehviewer.subscription.LocalFollowRepository;
+import com.hippo.ehviewer.subscription.LocalGlobalCursorStore;
 import com.hippo.ehviewer.subscription.LocalRefreshJobStore;
 import com.hippo.ehviewer.subscription.LocalUpdateService;
 import com.hippo.ehviewer.subscription.BookmarkUpdatePolicy;
@@ -329,11 +330,13 @@ public class BookmarksDraw {
             showJobDetails();
             return;
         }
-        long last = LocalRefreshJobStore.lastBookmarkSuccess();
-        boolean recommendGlobal = last == 0
-                || System.currentTimeMillis() - last <= 5L * 24L * 60L * 60L * 1000L;
+        long lastSuccess = LocalRefreshJobStore.lastBookmarkSuccess();
+        boolean recommendGlobal = lastSuccess == 0
+                || System.currentTimeMillis() - lastSuccess <= 5L * 24L * 60L * 60L * 1000L;
+        long globalCursorTime = LocalGlobalCursorStore.readCurrent(
+                context, LocalGlobalCursorStore.TYPE_BOOKMARK).timeMillis();
         LocalUpdateStartDialog.showBookmarks(context,
-                bookmarks == null ? 0 : bookmarks.size(), recommendGlobal, last,
+                bookmarks == null ? 0 : bookmarks.size(), recommendGlobal, globalCursorTime,
                 method -> {
                     requestNotificationPermission();
                     if (!LocalUpdateService.startBookmarks(context, method)) showJobDetails();

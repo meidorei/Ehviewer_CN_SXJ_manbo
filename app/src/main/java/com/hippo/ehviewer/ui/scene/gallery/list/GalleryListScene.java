@@ -39,8 +39,11 @@ import android.text.TextUtils;
 import android.text.style.ImageSpan;
 import android.util.Log;
 import android.view.Display;
+import android.view.GestureDetector;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
@@ -123,7 +126,9 @@ import com.hippo.ehviewer.subscription.SubscriptionRefreshStatus;
 import com.hippo.ehviewer.subscription.SubscriptionSnapshot;
 import com.hippo.ehviewer.subscription.SubscriptionUpdateCalculator;
 import com.hippo.ehviewer.subscription.LocalFollowRepository;
+import com.hippo.ehviewer.subscription.LocalGlobalCursorStore;
 import com.hippo.ehviewer.subscription.LocalRefreshJobStore;
+import com.hippo.ehviewer.subscription.LocalUnreadOpenPolicy;
 import com.hippo.ehviewer.subscription.LocalUpdateService;
 import com.hippo.ehviewer.util.TagTranslationUtil;
 import com.hippo.ehviewer.widget.GalleryInfoContentHelper;
@@ -181,6 +186,7 @@ public final class GalleryListScene extends BaseScene
     private FeedSourceContext mFeedSourceContext;
     private FeedBoundary mVisibleFeedBoundary = FeedBoundary.EMPTY;
     private FeedBoundaryDecoration mFeedBoundaryDecoration;
+    private RecyclerView.OnItemTouchListener mFeedBoundaryTouchListener;
     private boolean mUnreadClearedForContext;
     private long mUnreadSnapshotAt;
 
@@ -239,6 +245,8 @@ public final class GalleryListScene extends BaseScene
     private FabLayout mFabLayout;
     @Nullable
     private FloatingActionButton mFloatingActionButton;
+    @Nullable
+    private FloatingActionButton mHomeBoundaryFab;
     @Nullable
     private ViewTransition mViewTransition;
     @Nullable
@@ -389,6 +397,7 @@ public final class GalleryListScene extends BaseScene
                         LocalFollowRepository.SOURCE_FOLLOW, sourceKey) : 0;
         mVisibleFeedBoundary = FeedBoundary.EMPTY;
         clearVisibleFeedMarker();
+        updateHomeBoundaryAction();
         loadFeedBoundary();
     }
 
@@ -422,7 +431,9 @@ public final class GalleryListScene extends BaseScene
         repository.execute(() -> {
             FeedCheckpoint checkpoint;
             FeedBoundary boundary;
-            if (context.type == FeedSourceContext.Type.SUBSCRIPTION_AGGREGATE) {
+            if (context.type == FeedSourceContext.Type.HOME) {
+                boundary = repository.readHomeManualBoundary();
+            } else if (context.type == FeedSourceContext.Type.SUBSCRIPTION_AGGREGATE) {
                 checkpoint = repository.readCheckpoint(syncCheckpointKey(context));
                 boundary = checkpoint.previous;
             } else if (context.type == FeedSourceContext.Type.SUBSCRIPTION_TAG) {
@@ -438,10 +449,92 @@ public final class GalleryListScene extends BaseScene
             if (mFeedSourceContext != context) return;
             mVisibleFeedBoundary = boundary;
             if (mRecyclerView != null) mRecyclerView.post(() -> {
-                if (mFeedBoundaryDecoration != null) mFeedBoundaryDecoration.setBoundary(boundary);
+                if (mFeedBoundaryDecoration != null) {
+                    mFeedBoundaryDecoration.setLabel(getString(context.type == FeedSourceContext.Type.HOME
+                            ? R.string.home_boundary_marker : R.string.last_update_marker));
+                    mFeedBoundaryDecoration.setBoundary(boundary);
+                }
                 if (mRecyclerView != null) mRecyclerView.invalidateItemDecorations();
             });
         });
+    }
+
+    private void updateHomeBoundaryAction() {
+        if (mHomeBoundaryFab == null) return;
+        boolean home = mFeedSourceContext != null
+                && mFeedSourceContext.type == FeedSourceContext.Type.HOME;
+        mHomeBoundaryFab.setVisibility(home
+                ? mFabLayout != null && mFabLayout.isExpanded() ? View.VISIBLE : View.INVISIBLE
+                : View.GONE);
+        if (mFeedBoundaryDecoration != null) {
+            mFeedBoundaryDecoration.setLabel(getString(home
+                    ? R.string.home_boundary_marker : R.string.last_update_marker));
+        }
+    }
+
+    private void confirmHomeBoundaryReset() {
+        FeedSourceContext context = mFeedSourceContext;
+        Context uiContext = getEHContext();
+        if (context == null || context.type != FeedSourceContext.Type.HOME
+                || uiContext == null || mHelper == null) return;
+        FeedBoundary boundary = LocalFollowRepository.boundaryOf(mHelper.getData());
+        if (boundary.isEmpty()) {
+            Toast.makeText(uiContext, R.string.home_boundary_reset_unavailable,
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        new AlertDialog.Builder(uiContext)
+                .setTitle(R.string.home_boundary_reset_confirm_title)
+                .setMessage(R.string.home_boundary_reset_confirm_message)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.home_boundary_reset_confirm_action,
+                        (dialog, which) -> resetHomeBoundary(context, boundary))
+                .show();
+    }
+
+    private void resetHomeBoundary(FeedSourceContext context, FeedBoundary boundary) {
+        SubscriptionRepository repository = SubscriptionRepository.getInstance();
+        repository.execute(() -> {
+            try {
+                repository.replaceHomeManualBoundary(boundary);
+                MainActivity activity = getActivity2();
+                if (activity == null) return;
+                activity.runOnUiThread(() -> {
+                    if (mFeedSourceContext != context) return;
+                    mVisibleFeedBoundary = boundary;
+                    if (mFeedBoundaryDecoration != null) {
+                        mFeedBoundaryDecoration.setLabel(getString(R.string.home_boundary_marker));
+                        mFeedBoundaryDecoration.setBoundary(boundary);
+                    }
+                    if (mRecyclerView != null) mRecyclerView.invalidateItemDecorations();
+                    Context current = getEHContext();
+                    if (current != null) {
+                        Toast.makeText(current, R.string.home_boundary_reset_success,
+                                Toast.LENGTH_SHORT).show();
+                    }
+                });
+            } catch (RuntimeException e) {
+                Log.e(TAG, "Failed to save homepage boundary", e);
+                MainActivity activity = getActivity2();
+                if (activity == null) return;
+                activity.runOnUiThread(() -> {
+                    Context current = getEHContext();
+                    if (current != null) {
+                        Toast.makeText(current, R.string.home_boundary_reset_failed,
+                                Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
+        });
+    }
+
+    private boolean isHomeBoundaryTouch(MotionEvent event) {
+        return mFeedSourceContext != null
+                && mFeedSourceContext.type == FeedSourceContext.Type.HOME
+                && mRecyclerView != null
+                && mFeedBoundaryDecoration != null
+                && mFeedBoundaryDecoration.isInMarkerTouchArea(
+                        mRecyclerView, event.getX(), event.getY());
     }
 
     @Override
@@ -788,6 +881,7 @@ public final class GalleryListScene extends BaseScene
         mSearchBar = (SearchBar) ViewUtils.$$(mainLayout, R.id.search_bar);
         mFabLayout = (FabLayout) ViewUtils.$$(mainLayout, R.id.fab_layout);
         mFloatingActionButton = (FloatingActionButton) ViewUtils.$$(mFabLayout, R.id.tag_filter);
+        mHomeBoundaryFab = (FloatingActionButton) ViewUtils.$$(mFabLayout, R.id.home_boundary_reset);
 
         onFilter(filterOpen, filterTagList.size());
 
@@ -807,13 +901,36 @@ public final class GalleryListScene extends BaseScene
                 mRecyclerView, Settings.getListMode());
         mFeedBoundaryDecoration = new FeedBoundaryDecoration(
                 resources.getDisplayMetrics().density, resources.getDisplayMetrics().scaledDensity,
-                AttrResources.getAttrColor(context, android.R.attr.textColorSecondary),
+                AttrResources.getAttrColor(context, androidx.appcompat.R.attr.colorPrimary),
                 getString(R.string.last_update_marker), position -> {
                     if (mHelper == null || position < 0 || position >= mHelper.getData().size()) return null;
                     return mHelper.getDataAtEx(position);
                 });
         mFeedBoundaryDecoration.setBoundary(mVisibleFeedBoundary);
         mRecyclerView.addItemDecoration(mFeedBoundaryDecoration);
+        GestureDetector boundaryGestureDetector = new GestureDetector(context,
+                new GestureDetector.SimpleOnGestureListener() {
+                    @Override
+                    public boolean onDown(MotionEvent event) {
+                        return isHomeBoundaryTouch(event);
+                    }
+
+                    @Override
+                    public void onLongPress(MotionEvent event) {
+                        if (!isHomeBoundaryTouch(event) || mRecyclerView == null) return;
+                        mRecyclerView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                        confirmHomeBoundaryReset();
+                    }
+                });
+        mFeedBoundaryTouchListener = new RecyclerView.SimpleOnItemTouchListener() {
+            @Override
+            public boolean onInterceptTouchEvent(@NonNull RecyclerView recyclerView,
+                                                 @NonNull MotionEvent event) {
+                boundaryGestureDetector.onTouchEvent(event);
+                return false;
+            }
+        };
+        mRecyclerView.addOnItemTouchListener(mFeedBoundaryTouchListener);
 
         mAdapter.setThumbItemClickListener(this::onThumbItemClick);
         mRecyclerView.setSelector(Ripple.generateRippleDrawable(context, !AttrResources.getAttrBoolean(context, androidx.appcompat.R.attr.isLightTheme), new ColorDrawable(Color.TRANSPARENT)));
@@ -847,6 +964,7 @@ public final class GalleryListScene extends BaseScene
         mFabLayout.setHidePrimaryFab(false);
         mFabLayout.setOnClickFabListener(this);
         mFabLayout.setOnExpandListener(this);
+        updateHomeBoundaryAction();
         addAboveSnackView(mFabLayout);
 
         mActionFabDrawable = new AddDeleteDrawable(context, resources.getColor(R.color.primary_drawable_dark, null));
@@ -1081,11 +1199,15 @@ public final class GalleryListScene extends BaseScene
         }
         if (null != mRecyclerView) {
             mRecyclerView.stopScroll();
+            if (mFeedBoundaryTouchListener != null) {
+                mRecyclerView.removeOnItemTouchListener(mFeedBoundaryTouchListener);
+            }
             if (mFeedBoundaryDecoration != null) {
                 mRecyclerView.removeItemDecoration(mFeedBoundaryDecoration);
             }
             mRecyclerView = null;
         }
+        mFeedBoundaryTouchListener = null;
         mFeedBoundaryDecoration = null;
         if (null != mFabLayout) {
             removeAboveSnackView(mFabLayout);
@@ -1096,6 +1218,7 @@ public final class GalleryListScene extends BaseScene
         mSearchLayout = null;
         mSearchBar = null;
         mSearchFab = null;
+        mHomeBoundaryFab = null;
         mViewTransition = null;
         mLeftDrawable = null;
         mRightDrawable = null;
@@ -1292,10 +1415,12 @@ public final class GalleryListScene extends BaseScene
             if (mSubscriptionDraw != null) mSubscriptionDraw.showRefreshDetails();
             return;
         }
-        long last = LocalRefreshJobStore.lastFollowSuccess();
-        boolean recommendGlobal = last == 0
-                || System.currentTimeMillis() - last <= 5L * 24L * 60L * 60L * 1000L;
-        LocalUpdateStartDialog.showFollow(context, recommendGlobal, last, method -> {
+        long lastSuccess = LocalRefreshJobStore.lastFollowSuccess();
+        boolean recommendGlobal = lastSuccess == 0
+                || System.currentTimeMillis() - lastSuccess <= 5L * 24L * 60L * 60L * 1000L;
+        long globalCursorTime = LocalGlobalCursorStore.readCurrent(
+                context, LocalGlobalCursorStore.TYPE_FOLLOW).timeMillis();
+        LocalUpdateStartDialog.showFollow(context, recommendGlobal, globalCursorTime, method -> {
             if (Build.VERSION.SDK_INT >= 33
                     && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
                     != PackageManager.PERMISSION_GRANTED) {
@@ -1759,6 +1884,9 @@ public final class GalleryListScene extends BaseScene
                     return;
                 }
                 onItemClick(null, gInfoL.get((int) (Math.random() * gInfoL.size())));
+                break;
+            case 4: // Reset the manually controlled homepage marker
+                confirmHomeBoundaryReset();
                 break;
         }
 
@@ -2250,10 +2378,12 @@ public final class GalleryListScene extends BaseScene
     private void handleSuccessfulFeed(GalleryListParser.Result result) {
         FeedSourceContext context = mFeedSourceContext;
         if (context == null || mUrlBuilder == null
-                || mUrlBuilder.getPageIndex() != 0 || result.galleryInfoList.isEmpty()
+                || mUrlBuilder.getPageIndex() != 0
                 || mUnreadClearedForContext
                 || (context.type != FeedSourceContext.Type.SUBSCRIPTION_TAG
                 && context.type != FeedSourceContext.Type.QUICK_SEARCH)) return;
+        if (!LocalUnreadOpenPolicy.shouldComplete(
+                context.type, result.galleryInfoList.isEmpty())) return;
         mUnreadClearedForContext = true;
         FeedBoundary openedTop = LocalFollowRepository.boundaryOf(result.galleryInfoList);
         long unreadSnapshotRowId = mUnreadSnapshotAt;

@@ -104,8 +104,6 @@ public class DownloadFragment extends PreferenceFragmentCompat implements
         if(imageResolutionPref != null){
             imageResolutionPref.setSummary(getString(R.string.settings_download_image_resolution_summary, Settings.getImageResolution()));
         }
-
-
         if (mediaScan != null) {
             mediaScan.setOnPreferenceChangeListener(this);
         }

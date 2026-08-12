@@ -33,6 +33,7 @@ import com.hippo.ehviewer.EhDB;
 import com.hippo.ehviewer.Settings;
 import com.hippo.ehviewer.client.data.GalleryInfo;
 import com.hippo.ehviewer.dao.DownloadInfo;
+import com.hippo.ehviewer.reader.ReadingQueueRepository;
 import com.hippo.ehviewer.dao.DownloadLabel;
 import com.hippo.ehviewer.spider.SpiderDen;
 import com.hippo.ehviewer.spider.SpiderInfo;
@@ -714,6 +715,7 @@ public class DownloadManager implements SpiderQueen.OnSpiderListener {
         if (info != null) {
             // Remove from DB
             EhDB.removeDownloadInfo(info.gid);
+            ReadingQueueRepository.getInstance().remove(info.gid);
 
             // Remove all list and map
             mAllInfoList.remove(info);
@@ -750,6 +752,7 @@ public class DownloadManager implements SpiderQueen.OnSpiderListener {
 
             // Remove from DB
             EhDB.removeDownloadInfo(info.gid);
+            ReadingQueueRepository.getInstance().remove(info.gid);
 
             // Remove from all info map
             mAllInfoList.remove(info);

@@ -26,7 +26,6 @@ import com.hippo.ehviewer.client.EhUtils;
 import com.hippo.ehviewer.client.data.GalleryInfo;
 import com.hippo.ehviewer.client.data.GalleryTagGroup;
 import com.hippo.ehviewer.client.exception.ParseException;
-import com.hippo.ehviewer.sync.GalleryListTagsSyncTask;
 import com.hippo.util.ExceptionUtils;
 import com.hippo.util.JsoupUtils;
 import com.hippo.lib.yorozuya.NumberUtils;
@@ -233,8 +232,6 @@ public class GalleryListParser {
             e.printStackTrace();
             throw new ParseException("Can't parse gallery list", body);
         }
-
-        new GalleryListTagsSyncTask(result.galleryInfoList).execute();
 
         return result;
     }

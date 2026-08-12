@@ -3,6 +3,7 @@ package com.hippo.ehviewer.subscription;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.graphics.Typeface;
 import android.view.View;
 
 import androidx.annotation.NonNull;
@@ -16,7 +17,7 @@ public final class FeedBoundaryDecoration extends RecyclerView.ItemDecoration {
     private final ItemProvider provider;
     private final Paint linePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final String label;
+    private volatile String label;
     private final int height;
     private volatile FeedBoundary boundary = FeedBoundary.EMPTY;
 
@@ -24,21 +25,55 @@ public final class FeedBoundaryDecoration extends RecyclerView.ItemDecoration {
                                   String label, ItemProvider provider) {
         this.provider = provider;
         this.label = label;
-        this.height = Math.round(32 * density);
+        this.height = markerHeightPx(density);
         linePaint.setColor(color);
-        linePaint.setStrokeWidth(Math.max(1, density));
+        linePaint.setStrokeWidth(lineWidthPx(density));
         textPaint.setColor(color);
-        textPaint.setTextSize(13 * scaledDensity);
+        textPaint.setTextSize(textSizePx(scaledDensity));
+        textPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
         textPaint.setTextAlign(Paint.Align.CENTER);
+    }
+
+    static int markerHeightPx(float density) {
+        return Math.round(32 * density);
+    }
+
+    static float lineWidthPx(float density) {
+        return Math.max(1, 2 * density);
+    }
+
+    static float textSizePx(float scaledDensity) {
+        return 14 * scaledDensity;
+    }
+
+    static boolean isWithinMarkerTouchBounds(float touchY, int childTop, int markerHeight) {
+        return touchY >= childTop - markerHeight && touchY < childTop;
     }
 
     public void setBoundary(FeedBoundary value) {
         boundary = value == null ? FeedBoundary.EMPTY : value;
     }
 
+    public void setLabel(String value) {
+        label = value == null ? "" : value;
+    }
+
     private boolean isMarker(int position) {
         GalleryInfo item = provider.get(position);
         return item != null && boundary.isFirstOld(item.postedTimestamp, item.gid);
+    }
+
+    public boolean isInMarkerTouchArea(@NonNull RecyclerView parent, float touchX, float touchY) {
+        if (touchX < parent.getPaddingLeft()
+                || touchX >= parent.getWidth() - parent.getPaddingRight()) return false;
+        for (int i = 0; i < parent.getChildCount(); i++) {
+            View child = parent.getChildAt(i);
+            int position = parent.getChildAdapterPosition(child);
+            if (position < 0 || !isMarker(position)
+                    || position > 0 && isMarker(position - 1)) continue;
+            return isWithinMarkerTouchBounds(touchY, child.getTop(), height);
+        }
+        return false;
     }
 
     @Override public void getItemOffsets(@NonNull Rect outRect, @NonNull View view,

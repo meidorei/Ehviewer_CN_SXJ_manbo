@@ -79,6 +79,16 @@
             app:backgroundTint="?attr/widgetColorThemeAccent"
             style="@style/Widget.Design.FloatingActionButton.Mini"/>
 
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/home_boundary_reset"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/home_boundary_reset_action"
+            android:visibility="gone"
+            app:srcCompat="@drawable/v_home_boundary_dark_x24"
+            app:backgroundTint="?attr/widgetColorThemeAccent"
+            style="@style/Widget.Design.FloatingActionButton.Mini"/>
+
 
         <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:layout_width="wrap_content"

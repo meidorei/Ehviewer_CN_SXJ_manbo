@@ -737,7 +737,7 @@ public final class LocalUpdateService extends Service {
         builder.setKeyword(null);
         String url = withHost(builder.build(true), host);
         int pages = 0;
-        int galleries = 0;
+        WorkCounter totals = new WorkCounter();
         boolean reachedGlobalCursor = false;
         while (!exact.isEmpty() && url != null && pages < pageLimit && !shouldStop()) {
             String requestedUrl = url;
@@ -764,12 +764,11 @@ public final class LocalUpdateService extends Service {
                 firstSource = globalCursor.isEmpty();
                 reachedGlobalCursor = false;
                 pages = 0;
-                galleries = 0;
                 url = withHost(builder.build(true), effectiveHost);
                 continue;
             }
             pages++;
-            galleries += page.galleryInfoList.size();
+            totals.add(page);
             if (globalTop.isEmpty()) {
                 globalTop = LocalFollowRepository.boundaryOf(page.galleryInfoList);
             }
@@ -784,8 +783,8 @@ public final class LocalUpdateService extends Service {
                     }
                 }
             }
-            LocalRefreshJobStore.progress(completed, pages, galleries, "", "");
-            updateNotification("书签全局扫描：" + pages + " 页 · " + galleries + " 本",
+            LocalRefreshJobStore.progress(completed, totals.pages, totals.galleries, "", "");
+            updateNotification("书签全局扫描：" + totals.pages + " 页 · " + totals.galleries + " 本",
                     pages, pageLimit, true);
             notifyListeners();
             if (firstSource || reachedGlobalCursor) break;
@@ -825,7 +824,7 @@ public final class LocalUpdateService extends Service {
             for (GlobalBookmark work : exact) cursorFallback.add(work.search);
         }
 
-        LocalRefreshJobStore.progress(completed, pages, galleries,
+        LocalRefreshJobStore.progress(completed, totals.pages, totals.galleries,
                 cursorFallback.isEmpty() && bridgeFallback.isEmpty()
                         && complexFallback.isEmpty()
                         ? "" : "自动降级 "
@@ -834,7 +833,7 @@ public final class LocalUpdateService extends Service {
         notifyListeners();
         if (!cursorFallback.isEmpty()) {
             runBookmarkQueue(cursorFallback, effectiveHost, 0, completed,
-                    jobs.size(), pages, galleries, globalTop);
+                    jobs.size(), totals, globalTop);
             completed += cursorFallback.size();
             throwIfStopRequested();
             LocalGlobalCursorStore.write(contextKey,
@@ -843,16 +842,16 @@ public final class LocalUpdateService extends Service {
         }
         if (!bridgeFallback.isEmpty()) {
             runBookmarkQueue(bridgeFallback, effectiveHost, 0, completed,
-                    jobs.size(), pages, galleries, globalTop);
+                    jobs.size(), totals, globalTop);
             completed += bridgeFallback.size();
         }
         if (!complexFallback.isEmpty()) {
             runBookmarkQueue(new ArrayList<>(complexFallback.values()), effectiveHost,
-                    0, completed, jobs.size(), pages, galleries);
+                    0, completed, jobs.size(), totals);
             completed += complexFallback.size();
         }
         LocalRefreshJobStore.progress(Math.min(jobs.size(), completed),
-                pages, galleries, "", "");
+                totals.pages, totals.galleries, "", "");
     }
 
     private void initializeGlobalBookmarks(
@@ -892,7 +891,7 @@ public final class LocalUpdateService extends Service {
 
     private void runBookmarkQueue(List<QuickSearch> jobs, String host, int startIndex,
                                   int completedBefore, int total) throws Throwable {
-        runBookmarkQueue(jobs, host, startIndex, completedBefore, total, 0, 0);
+        runBookmarkQueue(jobs, host, startIndex, completedBefore, total, new WorkCounter());
     }
 
     private boolean hasExistingGlobalBookmarkCursor(
@@ -910,14 +909,14 @@ public final class LocalUpdateService extends Service {
 
     private void runBookmarkQueue(List<QuickSearch> jobs, String host, int startIndex,
                                   int completedBefore, int total,
-                                  int scannedPages, int scannedGalleries) throws Throwable {
+                                  WorkCounter work) throws Throwable {
         runBookmarkQueue(jobs, host, startIndex, completedBefore, total,
-                scannedPages, scannedGalleries, null);
+                work, null);
     }
 
     private void runBookmarkQueue(List<QuickSearch> jobs, String host, int startIndex,
                                   int completedBefore, int total,
-                                  int scannedPages, int scannedGalleries,
+                                  WorkCounter work,
                                   @Nullable FeedBoundary synchronizedTop) throws Throwable {
         LocalRefreshJobStore.phase(LocalRefreshJobStore.PHASE_BOOKMARK_QUEUE);
         List<QuickSearch> failures = new ArrayList<>();
@@ -926,14 +925,14 @@ public final class LocalUpdateService extends Service {
             QuickSearch search = jobs.get(i);
             String key = Long.toString(search.id);
             try {
-                checkBookmark(search, synchronizedTop);
+                checkBookmark(search, synchronizedTop, work);
             } catch (Throwable error) {
                 if (shouldStop()) return;
                 if (!isRetryable(error)) throw error;
                 failures.add(search);
             }
             int done = completedBefore + i + 1;
-            LocalRefreshJobStore.progress(done, scannedPages, scannedGalleries,
+            LocalRefreshJobStore.progress(done, work.pages, work.galleries,
                     search.name == null ? key : search.name, joinQuickFailures(failures));
             updateNotification("逐书签：" + done + "/" + total,
                     done, total, false);
@@ -944,7 +943,7 @@ public final class LocalUpdateService extends Service {
             Thread.sleep(attempt * 1600L);
             for (QuickSearch search : failures) {
                 try {
-                    checkBookmark(search, synchronizedTop);
+                    checkBookmark(search, synchronizedTop, work);
                 } catch (Throwable error) {
                     if (shouldStop()) return;
                     if (!isRetryable(error)) throw error;
@@ -955,16 +954,17 @@ public final class LocalUpdateService extends Service {
         }
         if (!failures.isEmpty()) {
             LocalRefreshJobStore.progress(completedBefore + jobs.size(),
-                    scannedPages, scannedGalleries, "",
+                    work.pages, work.galleries, "",
                     joinQuickFailures(failures));
             throw new IllegalStateException(failures.size() + " 个书签检查失败");
         }
         LocalRefreshJobStore.progress(completedBefore + jobs.size(),
-                scannedPages, scannedGalleries, "", "");
+                work.pages, work.galleries, "", "");
     }
 
     private void checkBookmark(
-            QuickSearch search, @Nullable FeedBoundary synchronizedTop) throws Throwable {
+            QuickSearch search, @Nullable FeedBoundary synchronizedTop,
+            WorkCounter work) throws Throwable {
         BookmarkUpdatePolicy.Result policy = BookmarkUpdatePolicy.resolve(search);
         String key = Long.toString(search.id);
         LocalFollowRepository local = LocalFollowRepository.getInstance();
@@ -974,29 +974,58 @@ public final class LocalUpdateService extends Service {
                     policy.signature, policy.error);
             return;
         }
-        GalleryListParser.Result page = fetchPage(
-                withHost(policy.url, effectiveHost), search.mode);
-        throwIfStopRequested();
-        CheckpointKey checkpoint = bookmarkCheckpoint(
-                sourceContext(effectiveHost), key, policy.signature);
-        ensureStateProvisional(LocalFollowRepository.SOURCE_BOOKMARK, key,
-                policy.signature, checkpoint);
-        if (page.galleryInfoList.isEmpty()) {
-            if (synchronizedTop == null || synchronizedTop.isEmpty()) {
-                local.markCheckedWithoutChanges(
-                        LocalFollowRepository.SOURCE_BOOKMARK, key, policy.signature);
-            } else {
-                local.commitSynchronizedPage(
-                        LocalFollowRepository.SOURCE_BOOKMARK, key, policy.signature,
-                        checkpoint, synchronizedTop, page.galleryInfoList);
+        String url = withHost(policy.url, effectiveHost);
+        Set<String> visited = new HashSet<>();
+        BookmarkScanAccumulator accumulator = null;
+        CheckpointKey checkpoint = null;
+        while (url != null) {
+            String requestedUrl = withHost(url, effectiveHost);
+            if (!visited.add(requestedUrl)) {
+                throw new IllegalStateException("书签分页地址重复");
             }
-        } else if (synchronizedTop == null || synchronizedTop.isEmpty()) {
-            local.commitPage(LocalFollowRepository.SOURCE_BOOKMARK, key, policy.signature,
-                    checkpoint, page.galleryInfoList, false);
-        } else {
-            local.commitSynchronizedPage(
-                    LocalFollowRepository.SOURCE_BOOKMARK, key, policy.signature,
-                    checkpoint, synchronizedTop, page.galleryInfoList);
+            GalleryListParser.Result page = fetchPage(requestedUrl, search.mode);
+            work.add(page);
+            recordBookmarkPageProgress(work, search);
+            throwIfStopRequested();
+            if (accumulator == null) {
+                checkpoint = bookmarkCheckpoint(
+                        sourceContext(effectiveHost), key, policy.signature);
+                ensureStateProvisional(LocalFollowRepository.SOURCE_BOOKMARK, key,
+                        policy.signature, checkpoint);
+                FeedCheckpoint old = SubscriptionRepository.getInstance()
+                        .readCheckpoint(checkpoint);
+                accumulator = new BookmarkScanAccumulator(old.current);
+            }
+            String next = resolveNext(withHost(requestedUrl, effectiveHost), page.nextHref);
+            if (!accumulator.addPage(page.galleryInfoList, next != null)) break;
+            url = next;
+        }
+        throwIfStopRequested();
+        if (accumulator == null || checkpoint == null) {
+            throw new IllegalStateException("书签扫描未开始");
+        }
+        local.commitBookmarkScan(key, policy.signature, checkpoint,
+                synchronizedTop, accumulator.finish());
+    }
+
+    private void recordBookmarkPageProgress(WorkCounter work, QuickSearch search) {
+        LocalRefreshJobStore.Snapshot snapshot = LocalRefreshJobStore.read();
+        int index = snapshot == null ? 0 : snapshot.index;
+        String failures = snapshot == null ? "" : snapshot.failures;
+        String current = search.name == null ? Long.toString(search.id) : search.name;
+        LocalRefreshJobStore.progress(index, work.pages, work.galleries, current, failures);
+        notifyListeners();
+    }
+
+    private static final class WorkCounter {
+        int pages;
+        int galleries;
+
+        void add(GalleryListParser.Result page) {
+            pages++;
+            if (page != null && page.galleryInfoList != null) {
+                galleries += page.galleryInfoList.size();
+            }
         }
     }
 

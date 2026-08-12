@@ -5,6 +5,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
+import com.hippo.ehviewer.client.data.GalleryInfo;
+
 import org.junit.Test;
 
 import java.util.Arrays;
@@ -48,7 +50,7 @@ public class SubscriptionCoreTest {
     }
 
     @Test public void updateMarkerOnlyShowsForUpdateSources() {
-        assertFalse(new FeedSourceContext(
+        assertTrue(new FeedSourceContext(
                 FeedSourceContext.Type.HOME, "home", "").showsMarker());
         assertFalse(new FeedSourceContext(
                 FeedSourceContext.Type.TEMP_SEARCH, "", "foo").showsMarker());
@@ -58,6 +60,35 @@ public class SubscriptionCoreTest {
                 FeedSourceContext.Type.SUBSCRIPTION_TAG, "artist:a", "").showsMarker());
         assertTrue(new FeedSourceContext(
                 FeedSourceContext.Type.QUICK_SEARCH, "42", "foo").showsMarker());
+    }
+
+    @Test public void homepageManualMarkerKeyIsDeviceWide() {
+        CheckpointKey key = FeedCheckpointKeys.homeManual();
+        assertEquals("shared", key.accountKey);
+        assertEquals("HOME_MANUAL", key.sourceType);
+        assertEquals("home", key.sourceKey);
+        assertEquals("", key.querySignature);
+    }
+
+    @Test public void homepageManualBoundaryKeepsEveryNewestSameSecondGid() {
+        GalleryInfo first = new GalleryInfo();
+        first.gid = 10L;
+        first.postedTimestamp = 200L;
+        GalleryInfo second = new GalleryInfo();
+        second.gid = 11L;
+        second.postedTimestamp = 200L;
+        GalleryInfo older = new GalleryInfo();
+        older.gid = 12L;
+        older.postedTimestamp = 199L;
+
+        FeedBoundary boundary = LocalFollowRepository.boundaryOf(
+                Arrays.asList(first, second, older));
+
+        assertEquals(200L, boundary.time);
+        assertEquals(new HashSet<>(Arrays.asList(10L, 11L)), boundary.gids);
+        assertTrue(boundary.isFirstOld(200L, 10L));
+        assertTrue(boundary.isFirstOld(200L, 11L));
+        assertTrue(boundary.isNew(200L, 13L));
     }
 
     @Test public void localBadgeCapsAtTwentyPlus() {

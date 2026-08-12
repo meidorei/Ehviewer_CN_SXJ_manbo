@@ -17,6 +17,9 @@ public final class FeedBoundary {
 
     public boolean isEmpty() { return time == 0; }
 
+    /** Converts the persisted Unix-seconds boundary to an Android UI timestamp. */
+    public long timeMillis() { return time == 0 ? 0 : time * 1000L; }
+
     public boolean isNew(long postedTimestamp, long gid) {
         return postedTimestamp > 0 && !isEmpty()
                 && (postedTimestamp > time || postedTimestamp == time && !gids.contains(gid));

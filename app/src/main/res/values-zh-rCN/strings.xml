@@ -16,6 +16,14 @@
 
 <resources>
     <string name="last_update_marker">上次更新到这</string>
+    <string name="home_boundary_marker">上次看到这里</string>
+    <string name="home_boundary_reset_action">重置并置顶首页分割线</string>
+    <string name="home_boundary_reset_confirm_title">重置首页分割线？</string>
+    <string name="home_boundary_reset_confirm_message">将“上次看到这里”移动到当前已加载列表的最新位置？</string>
+    <string name="home_boundary_reset_confirm_action">重置到顶部</string>
+    <string name="home_boundary_reset_success">首页分割线已重置到顶部</string>
+    <string name="home_boundary_reset_unavailable">当前没有可设置分割线的首页内容</string>
+    <string name="home_boundary_reset_failed">首页分割线重置失败</string>
     <string name="subscription_refresh_cooldown">追更刷新冷却中，请稍后再试</string>
     <string name="subscription_refresh_last">上次 %1$s</string>
     <string name="subscription_refresh_failed">失败 %1$s</string>
@@ -426,6 +434,8 @@
     <string name="sort_by_file_size_desc">按文件大小降序</string>
     <string name="download_start_all">全部开始</string>
     <string name="download_stop_all">全部停止</string>
+    <string name="download_watched">已观看</string>
+    <string name="download_watched_progress">已观看 %1$d/%2$d</string>
     <string name="download_reset_reading_progress">重置阅读进度</string>
     <string name="download_search_gallery">搜索画廊</string>
     <string name="download_search_hint">输入关键字</string>
@@ -1122,8 +1132,8 @@
     <string name="local_update_preparing">准备中</string>
     <string name="local_update_global_progress">%1$s · %2$d 页 / %3$d 本</string>
     <string name="local_update_item_progress">%1$s · %2$d/%3$d · %4$s</string>
-    <string name="local_update_no_full_success">尚无完整成功检查记录</string>
-    <string name="local_update_last_full_success">上次完整成功检查：%1$s</string>
+    <string name="local_update_no_global_cursor">尚无全局扫描边界</string>
+    <string name="local_update_global_cursor">下次全局扫描截止：%1$s</string>
     <string name="local_update_last_full_attempt">上次完整检查：%1$s</string>
     <string name="local_update_method_global">全局中文扫描\n最多扫描 %1$d 页，未覆盖的标签会自动改为逐标签检查。</string>
     <string name="local_update_method_global_recommended">全局中文扫描（推荐）\n最多扫描 %1$d 页，未覆盖的标签会自动改为逐标签检查。</string>
@@ -1148,4 +1158,21 @@
     <string name="follow_namespace_mixed">混合</string>
     <string name="follow_namespace_other">其他</string>
     <string name="follow_namespace_reclass">重新分类</string>
+    <string name="reading_queue">阅读队列</string>
+    <string name="no_reading_queue">成功打开的已下载漫画会显示在这里</string>
+    <string name="reading_queue_remove">移出阅读队列</string>
+    <string name="reading_queue_remove_done">已移出阅读队列</string>
+    <string name="reading_queue_delete_download">删除本地下载</string>
+    <string name="reading_queue_delete_confirm">确定删除“%1$s”的本地下载吗？此操作无法撤销。</string>
+    <string name="reading_queue_delete_failed">无法删除本地下载，已保留下载和队列记录</string>
+    <string name="reading_queue_delete_done">已删除本地下载</string>
+    <string name="reading_queue_auto_deleted">已自动删除 %1$d 个较早观看的下载</string>
+    <string name="reading_queue_cleanup_result">已删除 %1$d 个下载，%2$d 个删除失败</string>
+    <string name="reading_queue_settings">阅读队列设置</string>
+    <string name="settings_reading_queue_auto_delete">自动删除旧下载</string>
+    <string name="settings_reading_queue_capacity">阅读队列上限</string>
+    <string name="settings_reading_queue_capacity_invalid">请输入 1 到 100 的整数</string>
+    <string name="settings_reading_queue_file_warning">开启自动删除后，会永久删除旧漫画的整个本地下载目录，文件无法恢复。</string>
+    <string name="settings_reading_queue_cleanup_title">删除旧下载？</string>
+    <string name="settings_reading_queue_cleanup_message">将永久删除阅读队列中最早观看的 %1$d 部漫画的整个本地下载目录，此操作无法撤销。</string>
 </resources>

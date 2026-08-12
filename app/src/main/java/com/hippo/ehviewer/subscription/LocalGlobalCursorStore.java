@@ -1,8 +1,13 @@
 package com.hippo.ehviewer.subscription;
 
+import android.content.Context;
 import android.database.Cursor;
 
+import com.hippo.ehviewer.EhApplication;
 import com.hippo.ehviewer.EhDB;
+import com.hippo.ehviewer.client.EhCookieStore;
+import com.hippo.ehviewer.client.EhUrl;
+import com.hippo.ehviewer.client.IgneousUtils;
 
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -26,6 +31,15 @@ public final class LocalGlobalCursorStore {
             return new FeedBoundary(cursor.getLong(0),
                     SubscriptionRepository.parseGids(cursor.getString(1)));
         }
+    }
+
+    /** Reads the cursor that a new global update will use for the current account and site. */
+    public static FeedBoundary readCurrent(Context context, String jobType) {
+        EhCookieStore store = EhApplication.getEhCookieStore(context);
+        String host = IgneousUtils.isUsableIgneous(store.getIgneous())
+                ? EhUrl.HOST_EX : EhUrl.HOST_E;
+        String source = SubscriptionRepository.getInstance().getAccountKey() + "|" + host;
+        return read(source, jobType, LocalFollowRepository.FIXED_CHINESE_SIGNATURE);
     }
 
     public static void write(String accountKey, String jobType, String signature,
