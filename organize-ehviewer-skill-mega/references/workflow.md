@@ -88,13 +88,13 @@ Compress all multi-item series into a global index. Review duplicate canonical I
 }
 ```
 
-Anchor a series at its earliest original member. Sort reliable members by `itemOrder`. Preserve original relative order for unknown or tied positions. Preserve every download, including duplicate translations and overlapping collections.
+Anchor each series block at the position of its earliest original member in the source `TIME DESC` list. Order blocks by those anchors so unrelated series and standalone items keep their original relative order. Within a multi-item series, treat semantic `itemOrder` as old-to-new numbering but emit reliable members in descending `itemOrder`, newest to oldest, because EhViewer displays the resulting list in `TIME DESC`. Keep tied and unknown member positions stable in their original relative order. Preserve every download, including duplicate translations and overlapping collections.
 
 ## 6. Human review page
 
 Write every title and GID directly into the HTML. Runtime JavaScript may enhance the page but must not be required to load the catalog.
 
-Provide search, collapsible series, indented children, confidence and reasons, whole-series and within-series drag, low-confidence expansion, single-item pinning without moving the entire series, restoration, and complete JSON export with the unchanged fingerprint.
+Provide search, collapsible series, indented children, confidence and reasons, whole-series and within-series drag, low-confidence expansion, single-item pinning without moving the entire series, restoration, and complete JSON export with the unchanged fingerprint. Explain that the initial page keeps each series at its earliest source anchor and displays series members newest to oldest; restoration must return to that generated order.
 
 Pinned items change order only. They are not deletion instructions.
 

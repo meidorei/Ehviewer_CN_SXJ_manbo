@@ -31,7 +31,7 @@ Read [references/prompts.md](references/prompts.md) immediately before the three
 3. Run `scripts/snapshot_catalog.py` to check SQLite integrity and create `llm-full-catalog.json` plus `snapshot-summary.json`.
 4. Run `scripts/generate_candidates.py` to create overlapping high-recall candidates and complete author buckets.
 5. Perform three primary-model rounds: candidate adjudication, author-bucket missing-member audit, and global series-index conflict audit.
-6. Merge decisions into one full version-2 decision file, then run `scripts/build_order.py`. It anchors each series at its earliest original member, sorts known members by model order, and preserves original relative order when uncertain.
+6. Merge decisions into one full version-2 decision file, then run `scripts/build_order.py`. Keep each series block at its earliest original member, preserve unrelated blocks' relative order, and display reliable members from newest to oldest by descending semantic `itemOrder`. Preserve original relative order for tied or unknown member positions.
 7. Run `scripts/validate_order.py` against the model JSON.
 8. Generate a self-contained offline page with `scripts/generate_review_page.py`. Confirm that every title and GID is present statically in the HTML.
 9. Hand the page to the user and stop. Do not touch the device database while awaiting human review.
@@ -44,7 +44,7 @@ Read [references/prompts.md](references/prompts.md) immediately before the three
 
 - `snapshot_catalog.py`: read-only SQLite inspection, catalog export, GID fingerprint, and database hash.
 - `generate_candidates.py`: deterministic high-recall candidates and full author buckets.
-- `build_order.py`: turn one full set of semantic decisions into stable `seriesOrder` and `gidOrder` arrays.
+- `build_order.py`: turn one full set of semantic decisions into stable `seriesOrder` and `gidOrder` arrays while keeping original series anchors and showing members newest-first.
 - `validate_order.py`: strict JSON, fingerprint, GID, numeric-field, series-contiguity, and optional semantic-field validation.
 - `generate_review_page.py`: static offline review page with search, collapsible series, series/internal drag, single-item pinning, restore, and JSON export.
 - `apply_order.py`: backup plus transactional dry-run rewrite of `DOWNLOADS.TIME`; verifies exact order, integrity, uniqueness, and preservation of all other fields.
