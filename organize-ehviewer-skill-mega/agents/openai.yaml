@@ -1,4 +1,0 @@
-interface:
-  display_name: "EhViewer 漫画系列整理"
-  short_description: "跨语言识别系列，人工校对后安全写回 Debug 数据库"
-  default_prompt: "Use $organize-ehviewer-manga to organize my EhViewer downloads into series and prepare a safely validated review workflow."
